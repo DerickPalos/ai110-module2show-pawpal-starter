@@ -4,7 +4,59 @@
 
 **a. Initial design**
 
+Three core functions that must be implemented to provide value are:
+
+1. Add a Pet
+1. Add a Task
+1. Define a recurrence for a Task (e.g., daily, weekly, every `n` days, etc.)
+
 - Briefly describe your initial UML design.
+
+The application should have 4 main Objects:
+
+* Owner
+    * Attributes
+        * ID
+        * Name
+        * List of associated Pets
+    * Methods
+        * Add Pet
+        * Remove Pet
+        * Edit Pet
+        * Get associated Pets
+        * Get Tasks for associated Pets
+* Pet
+    * Attributes
+        * ID
+        * Name
+        * Birthday (optional)
+        * List of associated Owners
+    * Methods
+        * Add associated Task
+        * Remove associated Task
+        * Get associated Tasks
+        * Edit associated Task
+        * Edit list of associated Owners
+* Task
+    * Attributes
+        * ID
+        * Description
+        * Date
+        * Time (Optional)
+        * Pet
+        * Recurrence (e.g., daily, weekly, every `n` days, etc.)
+        * Status (complete, incomplete, skipped)
+    * Methods
+        * Update status
+* Scheduler
+    * Attributes
+        * Owner
+    * Methods
+        * Get Owner's Tasks
+        * Sort Owner's Tasks
+        * Filter Owner's Tasks
+        * Get Tasks by day
+
 - What classes did you include, and what responsibilities did you assign to each?
 
 **b. Design changes**

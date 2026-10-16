@@ -1,15 +1,65 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
-
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +int id
+        +str name
+        +List~Pet~ pets
+        +add_pet(pet)
+        +remove_pet(pet_id)
+        +edit_pet(pet_id, **changes)
+        +get_pets() List~Pet~
+        +get_tasks() List~Task~
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +int id
+        +str name
+        +date birthday
+        +List~Owner~ owners
+        +List~Task~ tasks
+        +add_task(task)
+        +remove_task(task_id)
+        +get_tasks() List~Task~
+        +edit_task(task_id, **changes)
+        +edit_owners(owners)
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +int id
+        +str description
+        +date date
+        +time time
+        +Pet pet
+        +Recurrence recurrence
+        +Status status
+        +update_status(status)
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_owner_tasks() List~Task~
+        +sort_tasks(tasks, sort_by) List~Task~
+        +filter_tasks(tasks, status, pet) List~Task~
+        +get_tasks_by_day(day, tasks) List~Task~
+    }
+
+    class Status {
+        <<enumeration>>
+        COMPLETE
+        INCOMPLETE
+        SKIPPED
+    }
+
+    class Recurrence {
+        <<enumeration>>
+        NONE
+        DAILY
+        WEEKLY
+        EVERY_N_DAYS
+    }
+
+    Owner "1..*" -- "0..*" Pet : cares for
+    Pet "1" *-- "0..*" Task : has
+    Scheduler "1" --> "1" Owner : schedules for
+    Scheduler ..> Task : queries
+    Task --> Status
+    Task --> Recurrence
