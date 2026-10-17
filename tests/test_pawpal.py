@@ -182,6 +182,13 @@ def test_add_task(pet):
     assert pet.get_tasks() == [task]
 
 
+def test_adding_tasks_increases_count_each_time(pet):
+    assert len(pet.get_tasks()) == 0
+    for expected in (1, 2, 3):
+        pet.add_task(Task(description="Walk", date=date(2026, 1, 1), pet=pet))
+        assert len(pet.get_tasks()) == expected
+
+
 def test_add_task_rejects_other_pets_task(pet):
     task = Task(description="Walk", date=date(2026, 1, 1), pet=Pet(name="Fido"))
     with pytest.raises(ValueError):
