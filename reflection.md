@@ -2,7 +2,7 @@
 
 ## 1. System Design
 
-**a. Initial design**
+### a. Initial design
 
 Three core functions that must be implemented to provide value are:
 
@@ -67,7 +67,7 @@ Pets can add/remove/edit Tasks, get a list of their own associated Tasks, and ed
 
 Task can only update its status. An Owner's visibility into Tasks can only come through their associated Pets.
 
-**b. Design changes**
+### b. Design changes
 
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
@@ -78,12 +78,17 @@ Yes. The AI assistant caught an oversight, in that the every `n` days never had 
 
 ## 2. Scheduling Logic and Tradeoffs
 
-**a. Constraints and priorities**
+### a. Constraints and priorities
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+
+Scheduler sorts Tasks by date, time, then priority (in tiebreaker order). It also assumes that the Task list is fully populated when generating a schedule. The Current Tasks list is a much better representation of the data rather than the schedule that comes out of **Generate schedule**.
+
 - How did you decide which constraints mattered most?
 
-**b. Tradeoffs**
+The nature of this repository means that there are comments already pre-populated that hint at application behavior. At earlier points in the project, it was hard to reconcile which hints were referencing features I was missing and which hints were referencing features that I was going to address in later Phases. The lack of Owner preference was due to my treating the CodeHub project documentation as true over the README.
+
+### b. Tradeoffs
 
 - Describe one tradeoff your scheduler makes.
 
@@ -99,7 +104,7 @@ I accepted the tradeoff regardless, as we were aiming for lightweight. If we get
 
 ## 3. AI Collaboration
 
-**a. How you used AI**
+### a. How you used AI
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 
@@ -113,7 +118,7 @@ I also missed some requirements. I prompted the AI assistant with a small plan t
 
 I found that the (relatively) large job of adding a new requirement was performed quite well after giving it a list of things I think it should address. I gave it a 6-step plan that it agreed with, and I liked that I could notice that it spent more time actually processing and making changes, and I could see it progressing through the list.
 
-**b. Judgment and verification**
+### b. Judgment and verification
 
 - Describe one moment where you did not accept an AI suggestion as-is.
 
@@ -127,28 +132,38 @@ It felt like the most important thing to evaluate myself was every time the actu
 
 ## 4. Testing and Verification
 
-**a. What you tested**
+### a. What you tested
 
 - What behaviors did you test?
 - Why were these tests important?
 
-**b. Confidence**
+The test coverage is actually quite large, as I asked for unit tests after every class implementation change. It was important to keep checking the unit test status while adding new, real Objects instead of mock Objects. It helped reassure that adding Pet did not break Task, and adding Owner, did not break Pet or Task. Reciprocally, Task did not need to know the implemenation details of Pet, and Pet did not need to know the implementation details of Owner.
+
+### b. Confidence
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
+
+I think I'm only 4/5 stars confident. The **Current Tasks** view seems like what we _actually_ want, and I think that section is 5/5 stars confident. I think that the **Build Schedule** section misses the mark. I also think I am missing an owner "preference" at the time of writing.
 
 ---
 
 ## 5. Reflection
 
-**a. What went well**
+### a. What went well
 
 - What part of this project are you most satisfied with?
 
-**b. What you would improve**
+When the AI made changes and suggested the next changes to make, sometimes the scope of the original change causes the volume of suggested next steps to increase. I was satisfied by coming up with a plan myself and proposing it, then watching the AI moving from file to file to edit as per the plan.
+
+### b. What you would improve
 
 - If you had another iteration, what would you improve or redesign?
 
-**c. Key takeaway**
+ I think I would ask for clarification on the requirements. I think this is just a product of having to maintain multiple sets of directions in CodePath courses and in code repos themselves. In my experience, the client's requirements must be clear in order for us to implement the desired features.
+
+## c. Key takeaway
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+Using different sessions with different focuses was helpful. The chat for business logic, the chat for Streamlit application logic, and the general application chats all had appropriate context to answer the prompts.

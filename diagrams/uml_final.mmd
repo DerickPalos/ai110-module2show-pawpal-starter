@@ -1,0 +1,96 @@
+classDiagram
+    class Owner {
+        +int id [auto]
+        +str name
+        +List~Pet~ pets
+        +add_pet(pet)
+        +create_pet(name, birthday, species) Pet
+        +remove_pet(pet_id)
+        +edit_pet(pet_id, **changes)
+        +get_pets() List~Pet~
+        +get_tasks() List~Task~
+    }
+
+    class Pet {
+        +int id [auto]
+        +str name
+        +date birthday
+        +Species species
+        +List~Owner~ owners
+        +List~Task~ tasks
+        +validate()
+        +edit(**changes)
+        +add_task(task)
+        +create_task(description, date, duration, priority, **fields) Task
+        +remove_task(task_id)
+        +get_tasks() List~Task~
+        +edit_task(task_id, **changes)
+        +edit_owners(owners)
+    }
+
+    class Task {
+        +int id [auto]
+        +str description
+        +date date
+        +Pet pet
+        +int duration
+        +Priority priority
+        +time time
+        +Recurrence recurrence
+        +int interval_days
+        +date end_date
+        +Status status
+        -bool _spawned
+        +validate()
+        +edit(**changes)
+        +update_status(status)
+        +next_occurrence() Task
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_owner_tasks() List~Task~
+        +sort_tasks(tasks, sort_by) List~Task~
+        +filter_tasks(tasks, status, pet, priority) List~Task~
+        +get_tasks_by_day(day, tasks) List~Task~
+        +find_conflicts(tasks) List~List~Task~~
+        +get_conflict_warnings(tasks) List~str~
+    }
+
+    class Status {
+        <<enumeration>>
+        COMPLETE
+        INCOMPLETE
+        SKIPPED
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class Species {
+        <<enumeration>>
+        DOG
+        CAT
+        OTHER
+    }
+
+    class Recurrence {
+        <<enumeration>>
+        NONE
+        DAILY
+        WEEKLY
+        EVERY_N_DAYS
+    }
+
+    Owner "1..*" -- "0..*" Pet : cares for
+    Pet "1" *-- "0..*" Task : has
+    Scheduler "1" --> "1" Owner : schedules for
+    Scheduler ..> Task : queries
+    Pet --> Species
+    Task --> Status
+    Task --> Priority
+    Task --> Recurrence

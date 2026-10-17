@@ -45,77 +45,6 @@ pip install -r requirements.txt
 ## 🖥️ Sample Output
 
 ```
-Today's Schedule for Jordan (Saturday, October 17, 2026)
-================================================================
-[ ] 08:00 AM  Breakfast         15 min  HIGH   (Mochi)
-[ ] 12:30 PM  Flea medicine      5 min  HIGH   (Biscuit)
-[ ] 06:00 PM  Evening walk      45 min  MEDIUM (Mochi)
-[ ] Anytime   Brush coat        20 min  LOW    (Biscuit)
-```
-
-```
-All tasks, in the order they were added
-========================================================================
-[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
-[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
-[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
-[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
-[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
-
-Today's Schedule for Jordan (Saturday, October 17, 2026)
-========================================================================
-[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
-[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
-
-Filtered by status: incomplete
-========================================================================
-[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
-[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
-[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
-[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
-[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
-
-Filtered by status: complete
-========================================================================
-[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-
-Filtered by status: skipped
-========================================================================
-[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
-
-Filtered by pet: Mochi
-========================================================================
-[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
-[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
-[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
-[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
-[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
-[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
-
-Filtered by pet: Biscuit
-========================================================================
-[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
-[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
-[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
-[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
-```
-
-```
 All tasks, in the order they were added
 ========================================================================
 [ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
@@ -254,10 +183,43 @@ Confidence Level: ⭐⭐⭐⭐
 
 Describe your app in numbered steps so a reader can follow along without watching a video:
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+1. Launch the PawPal+ app.
+2. Add a Pet to an Owner.
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+    Fill out the form in the **Owner and Pets** section with an **Owner name**, a **Pet name**, and a **Pet Species**, and select **Add pet**.
+    
+    * A **Pet** is added to the **Owner** and appears in a **Current pets** table at the bottom of the **Owner and Pets** section.
+    * This step is repeatable.
+
+3. Add a Task to a Pet.
+
+    Select a **Pet** from the list of available Pets. Add a **Task title**, **Date**, **Time** _(Optional)_, **Duration (minutes)**, **Priority**, and info for recurrence. Select **Add task**.
+
+    * A **Task** is added to the **Pet** and appears in a **Current Tasks** section.
+    * This step is repeatable.
+    * The presence of **Task** that shares a start time with another **Task** will produce a Warning for a scheduling conflict.
+
+4. In the **Build Schedule** section, select the **Generate schedule** button.
+
+    * A table appears to show the scheduled Tasks.
+
+![Screenshot 1 of PawPal+](images/application1.png)
+
+![Screenshot 2 of PawPal+](images/application2.png)
+
+![Screenshot 3 of PawPal+](images/application3.png)
+
+## UML
+
+![Final UML diagram](diagrams/uml_final.png)
+
+## Features
+
+- **Owner and pets:** Set the owner's name and add as many pets as you like, each with a name and species. Pets must be added before tasks.
+- **Add tasks:** Choose a pet, then give the task a title, date, optional time, duration (1–240 minutes) and priority (Low, Medium or High). A confirmation message appears when the task is added.
+- **Repeating tasks:** A task can repeat daily, weekly or every N days, optionally until a chosen end date.
+- **Complete or skip tasks:** Mark an open task as complete or skipped. For a repeating task, the next occurrence is added automatically and the confirmation message names its date.
+- **Edit tasks:** Change any task's title, date, time, duration, priority or repeat settings. A task's time can be changed but not cleared once set.
+- **Filter and sort the task list:** Filter by pet, status or priority, and sort by date, time or priority. Tasks with no set time are listed last.
+- **Conflict warnings:** The app warns when two open tasks, whether for the same pet or different pets, start at the same time on the same day. It shows "No scheduling conflicts" when there are none.
+- **Today's schedule:** One button lists today's tasks in time order, with higher priority first when times match and untimed tasks last.

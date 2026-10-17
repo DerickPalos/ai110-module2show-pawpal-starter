@@ -2,7 +2,7 @@ from datetime import date, time, timedelta
 
 import streamlit as st
 
-from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species
+from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species, Status
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -10,12 +10,9 @@ st.title("🐾 PawPal+")
 
 st.markdown(
     """
-Welcome to the PawPal+ starter app.
+Welcome to PawPal+, a pet care planner.
 
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
+Add your pets, schedule their care tasks, and keep track of what's done.
 """
 )
 
@@ -84,13 +81,21 @@ def seed_demo_data(owner):
 # session_state and only create it the first time.
 if "owner" not in st.session_state:
     st.session_state.owner = Owner(name="Jordan")
-    seed_demo_data(st.session_state.owner)  # comment out this line to start empty
+    seed_demo_data(st.session_state.owner)  # uncomment to start with sample data
 owner = st.session_state.owner
 
 
 def fmt_time(t):
     """Format an optional time of day for display."""
     return t.strftime("%I:%M %p") if t else "Anytime"
+
+
+def task_label(task):
+    """One-line description of a task for use in a selectbox."""
+    return (
+        f"{task.date:%a %b %d} {fmt_time(task.time)} - "
+        f"{task.description} ({task.pet.name})"
+    )
 
 
 st.subheader("Owner and Pets")
@@ -104,6 +109,7 @@ species = st.selectbox("Species", ["dog", "cat", "other"])
 if st.button("Add pet"):
     if pet_name.strip():
         owner.create_pet(pet_name.strip(), species=Species(species))
+        st.success(f"Added pet '{pet_name.strip()}'.")
     else:
         st.error("Please enter a pet name.")
 
@@ -146,6 +152,24 @@ else:
             format_func=lambda p: p.name.title(),
         )
 
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        recurrence = st.selectbox(
+            "Repeats",
+            list(Recurrence),
+            format_func=lambda r: r.value.replace("_", " ").title(),
+        )
+    with col2:
+        interval_days = st.number_input(
+            "Every N days",
+            min_value=1,
+            max_value=365,
+            value=2,
+            disabled=recurrence is not Recurrence.EVERY_N_DAYS,
+        )
+    with col3:
+        end_date = st.date_input("Repeat until (optional)", value=None)
+
     if st.button("Add task"):
         if not task_title.strip():
             st.error("Please enter a task title.")
@@ -157,31 +181,215 @@ else:
                     int(duration),
                     priority,
                     time=task_time,
+                    recurrence=recurrence,
+                    interval_days=(
+                        int(interval_days)
+                        if recurrence is Recurrence.EVERY_N_DAYS
+                        else None
+                    ),
+                    end_date=end_date,
+                )
+                st.success(
+                    f"Added '{task_title.strip()}' for {pet_by_id[pet_id].name}."
                 )
             except ValueError as err:
                 st.error(str(err))
 
 scheduler = Scheduler(owner)
-for warning in scheduler.get_conflict_warnings():
-    st.warning(warning)
 
-all_tasks = scheduler.sort_tasks()
-if all_tasks:
-    st.write("Current tasks:")
-    st.table(
-        [
-            {
-                "Pet": t.pet.name,
-                "Title": t.description,
-                "Date": t.date.isoformat(),
-                "Time": fmt_time(t.time),
-                "Duration (min)": t.duration,
-                "Priority": t.priority.name.title(),
-                "Status": t.status.value.title(),
-            }
-            for t in all_tasks
-        ]
+
+def finish_task(task, status):
+    """Update a task's status and queue a success message for the next run."""
+    known_ids = {t.id for t in task.pet.tasks}
+    task.update_status(status)
+    verb = "Completed" if status is Status.COMPLETE else "Skipped"
+    message = f"{verb} '{task.description}' ({task.pet.name})."
+    spawned = [t for t in task.pet.tasks if t.id not in known_ids]
+    if spawned:
+        message += f" Next one added for {spawned[0].date:%a %b %d}."
+    # st.rerun() below wipes anything shown now, so show it on the next run.
+    st.session_state.flash = message
+
+
+if pets:
+    st.markdown("### Update Task Status")
+    st.caption("Completing or skipping a repeating task adds its next occurrence.")
+    flash = st.session_state.pop("flash", None)
+    if flash:
+        st.success(flash)
+    open_tasks = scheduler.sort_tasks(scheduler.filter_tasks(status=Status.INCOMPLETE))
+    if open_tasks:
+        open_by_id = {t.id: t for t in open_tasks}
+        open_id = st.selectbox(
+            "Task",
+            list(open_by_id),
+            format_func=lambda i: task_label(open_by_id[i]),
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Mark complete"):
+                finish_task(open_by_id[open_id], Status.COMPLETE)
+                st.rerun()
+        with col2:
+            if st.button("Skip"):
+                finish_task(open_by_id[open_id], Status.SKIPPED)
+                st.rerun()
+    else:
+        st.info("No open tasks.")
+
+if scheduler.get_owner_tasks():
+    st.markdown("### Edit Task")
+    st.caption("Change any task that belongs to one of your pets.")
+    edit_by_id = {t.id: t for t in scheduler.sort_tasks()}
+    edit_id = st.selectbox(
+        "Task to edit",
+        list(edit_by_id),
+        format_func=lambda i: task_label(edit_by_id[i]),
+        key="edit_task_id",
     )
+    task = edit_by_id[edit_id]
+    # Keys include the task id so the fields reset to whichever task is selected.
+    k = f"edit_{task.id}_"
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        new_title = st.text_input("Title", value=task.description, key=k + "title")
+    with col2:
+        new_date = st.date_input("Task date", value=task.date, key=k + "date")
+    with col3:
+        new_time = st.time_input(
+            "Task time (optional)", value=task.time, key=k + "time"
+        )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        new_duration = st.number_input(
+            "Task duration (minutes)",
+            min_value=1,
+            max_value=240,
+            value=min(task.duration, 240),
+            key=k + "duration",
+        )
+    with col2:
+        new_priority = st.selectbox(
+            "Task priority",
+            list(Priority),
+            index=list(Priority).index(task.priority),
+            format_func=lambda p: p.name.title(),
+            key=k + "priority",
+        )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        new_recurrence = st.selectbox(
+            "Task repeats",
+            list(Recurrence),
+            index=list(Recurrence).index(task.recurrence),
+            format_func=lambda r: r.value.replace("_", " ").title(),
+            key=k + "recurrence",
+        )
+    with col2:
+        new_interval = st.number_input(
+            "Task every N days",
+            min_value=1,
+            max_value=365,
+            value=task.interval_days or 2,
+            disabled=new_recurrence is not Recurrence.EVERY_N_DAYS,
+            key=k + "interval",
+        )
+    with col3:
+        new_end_date = st.date_input(
+            "Task repeat until (optional)", value=task.end_date, key=k + "end"
+        )
+
+    if st.button("Save changes"):
+        if not new_title.strip():
+            st.error("Please enter a task title.")
+        else:
+            try:
+                task.pet.edit_task(
+                    task.id,
+                    description=new_title.strip(),
+                    date=new_date,
+                    time=new_time,
+                    duration=int(new_duration),
+                    priority=new_priority,
+                    recurrence=new_recurrence,
+                    interval_days=(
+                        int(new_interval)
+                        if new_recurrence is Recurrence.EVERY_N_DAYS
+                        else None
+                    ),
+                    end_date=new_end_date,
+                )
+            except ValueError as err:
+                st.error(str(err))
+            else:
+                st.session_state.flash = (
+                    f"Updated '{task.description}' ({task.pet.name})."
+                )
+                st.rerun()
+
+conflict_warnings = scheduler.get_conflict_warnings()
+for warning in conflict_warnings:
+    st.warning(warning)
+if not conflict_warnings and scheduler.get_owner_tasks():
+    st.success("No scheduling conflicts.")
+
+st.markdown("### Current Tasks")
+if scheduler.get_owner_tasks():
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        filter_pet_id = st.selectbox(
+            "Pet",
+            [None, *pet_by_id],
+            format_func=lambda i: "All" if i is None else pet_by_id[i].name,
+            key="filter_pet",
+        )
+    with col2:
+        filter_status = st.selectbox(
+            "Status",
+            [None, *Status],
+            format_func=lambda s: "All" if s is None else s.value.title(),
+        )
+    with col3:
+        filter_priority = st.selectbox(
+            "Priority",
+            [None, *Priority],
+            format_func=lambda p: "All" if p is None else p.name.title(),
+            key="filter_priority",
+        )
+    with col4:
+        sort_by = st.selectbox(
+            "Sort by", ["date", "time", "priority"], format_func=str.title
+        )
+
+    shown_tasks = scheduler.sort_tasks(
+        scheduler.filter_tasks(
+            status=filter_status,
+            pet=pet_by_id[filter_pet_id] if filter_pet_id is not None else None,
+            priority=filter_priority,
+        ),
+        sort_by,
+    )
+    if shown_tasks:
+        st.table(
+            [
+                {
+                    "Pet": t.pet.name,
+                    "Title": t.description,
+                    "Date": t.date.isoformat(),
+                    "Time": fmt_time(t.time),
+                    "Duration (min)": t.duration,
+                    "Priority": t.priority.name.title(),
+                    "Repeats": t.recurrence.value.replace("_", " ").title(),
+                    "Status": t.status.value.title(),
+                }
+                for t in shown_tasks
+            ]
+        )
+    else:
+        st.info("No tasks match the filters.")
 elif pets:
     st.info("No tasks yet. Add one above.")
 
