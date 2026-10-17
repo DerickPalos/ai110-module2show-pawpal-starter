@@ -3,7 +3,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from pawpal_system import Owner, Pet, Recurrence, Scheduler, Status, Task
+from pawpal_system import (
+    Owner,
+    Pet,
+    Priority,
+    Recurrence,
+    Scheduler,
+    Status,
+    Task,
+)
 
 
 @pytest.fixture
@@ -20,10 +28,10 @@ def owner():
 def week(owner):
     """An owner with two pets and four tasks, deliberately out of order."""
     rex, tom = owner.create_pet("Rex"), owner.create_pet("Tom")
-    a = rex.create_task("a", date(2026, 1, 2), time=time(9, 0))
-    b = rex.create_task("b", date(2026, 1, 1))  # no time
-    c = tom.create_task("c", date(2026, 1, 1), time=time(8, 0))
-    d = tom.create_task("d", date(2026, 1, 1), time=time(7, 0))
+    a = rex.create_task("a", date(2026, 1, 2), 30, Priority.MEDIUM, time=time(9, 0))
+    b = rex.create_task("b", date(2026, 1, 1), 30, Priority.MEDIUM)  # no time
+    c = tom.create_task("c", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(8, 0))
+    d = tom.create_task("d", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(7, 0))
     d.update_status(Status.COMPLETE)
     return SimpleNamespace(
         scheduler=Scheduler(owner), rex=rex, tom=tom, a=a, b=b, c=c, d=d
@@ -47,6 +55,16 @@ def test_sort_by_time_of_day_untimed_last(week):
     assert w.scheduler.sort_tasks(sort_by="time") == [w.d, w.c, w.a, w.b]
 
 
+def test_sort_by_priority_high_first_then_date_and_time(owner):
+    rex = owner.create_pet("Rex")
+    low = rex.create_task("low", date(2026, 1, 1), 10, Priority.LOW)
+    late_high = rex.create_task("late", date(2026, 1, 2), 10, Priority.HIGH)
+    early_high = rex.create_task("early", date(2026, 1, 1), 10, Priority.HIGH)
+    mid = rex.create_task("mid", date(2026, 1, 1), 10, Priority.MEDIUM)
+    result = Scheduler(owner).sort_tasks(sort_by="priority")
+    assert result == [early_high, late_high, mid, low]
+
+
 def test_sort_returns_copy_and_leaves_input_alone(week):
     w = week
     given = [w.a, w.b]
@@ -57,8 +75,8 @@ def test_sort_returns_copy_and_leaves_input_alone(week):
 
 def test_sort_is_stable_for_ties(pet, owner):
     owner.add_pet(pet)
-    first = pet.create_task("first", date(2026, 1, 1))
-    second = pet.create_task("second", date(2026, 1, 1))
+    first = pet.create_task("first", date(2026, 1, 1), 30, Priority.MEDIUM)
+    second = pet.create_task("second", date(2026, 1, 1), 30, Priority.MEDIUM)
     assert Scheduler(owner).sort_tasks([second, first]) == [second, first]
 
 
@@ -83,6 +101,13 @@ def test_filter_by_pet(week):
     assert w.scheduler.filter_tasks(pet=w.tom) == [w.c, w.d]
 
 
+def test_filter_by_priority(week):
+    w = week
+    w.a.edit(priority=Priority.HIGH)
+    assert w.scheduler.filter_tasks(priority=Priority.HIGH) == [w.a]
+    assert w.scheduler.filter_tasks(priority=Priority.LOW) == []
+
+
 def test_filter_by_status_and_pet(week):
     w = week
     assert w.scheduler.filter_tasks(status=Status.INCOMPLETE, pet=w.tom) == [w.c]
@@ -101,6 +126,18 @@ def test_filter_only_looks_at_given_tasks(week):
 def test_tasks_by_day_in_time_order(week):
     w = week
     assert w.scheduler.get_tasks_by_day(date(2026, 1, 1)) == [w.d, w.c, w.b]
+
+
+def test_tasks_by_day_breaks_time_ties_by_priority(owner):
+    rex = owner.create_pet("Rex")
+    low = rex.create_task("low", date(2026, 1, 1), 10, Priority.LOW, time=time(8))
+    high = rex.create_task("high", date(2026, 1, 1), 10, Priority.HIGH, time=time(8))
+    earlier = rex.create_task(
+        "earlier", date(2026, 1, 1), 10, Priority.LOW, time=time(7)
+    )
+    untimed = rex.create_task("untimed", date(2026, 1, 1), 10, Priority.HIGH)
+    result = Scheduler(owner).get_tasks_by_day(date(2026, 1, 1))
+    assert result == [earlier, high, low, untimed]
 
 
 def test_tasks_by_day_with_no_tasks(week):
@@ -165,8 +202,9 @@ def test_missing_pet_id_raises(owner, method):
 
 
 def test_owner_get_tasks_spans_all_pets(owner):
-    walk = owner.create_pet("Rex").create_task("Walk", date(2026, 1, 1))
-    feed = owner.create_pet("Tom").create_task("Feed", date(2026, 1, 2))
+    rex, tom = owner.create_pet("Rex"), owner.create_pet("Tom")
+    walk = rex.create_task("Walk", date(2026, 1, 1), 30, Priority.MEDIUM)
+    feed = tom.create_task("Feed", date(2026, 1, 2), 30, Priority.MEDIUM)
     assert owner.get_tasks() == [walk, feed]
 
 
@@ -177,7 +215,13 @@ def test_owner_get_tasks_empty(owner):
 # --- Pet: tasks ---
 
 def test_add_task(pet):
-    task = Task(description="Walk", date=date(2026, 1, 1), pet=pet)
+    task = Task(
+        description="Walk",
+        date=date(2026, 1, 1),
+        pet=pet,
+        duration=30,
+        priority=Priority.MEDIUM,
+    )
     pet.add_task(task)
     assert pet.get_tasks() == [task]
 
@@ -185,46 +229,70 @@ def test_add_task(pet):
 def test_adding_tasks_increases_count_each_time(pet):
     assert len(pet.get_tasks()) == 0
     for expected in (1, 2, 3):
-        pet.add_task(Task(description="Walk", date=date(2026, 1, 1), pet=pet))
+        pet.add_task(
+            Task(
+                description="Walk",
+                date=date(2026, 1, 1),
+                pet=pet,
+                duration=30,
+                priority=Priority.MEDIUM,
+            )
+        )
         assert len(pet.get_tasks()) == expected
 
 
 def test_add_task_rejects_other_pets_task(pet):
-    task = Task(description="Walk", date=date(2026, 1, 1), pet=Pet(name="Fido"))
+    task = Task(
+        description="Walk",
+        date=date(2026, 1, 1),
+        pet=Pet(name="Fido"),
+        duration=30,
+        priority=Priority.MEDIUM,
+    )
     with pytest.raises(ValueError):
         pet.add_task(task)
     assert pet.get_tasks() == []
 
 
+def test_create_task_requires_duration_and_priority(pet):
+    with pytest.raises(TypeError):
+        pet.create_task("Walk", date(2026, 1, 1))
+    with pytest.raises(TypeError):
+        pet.create_task("Walk", date(2026, 1, 1), 30)
+    assert pet.tasks == []
+
+
 def test_add_task_rejects_duplicate(pet):
-    task = pet.create_task("Walk", date(2026, 1, 1))
+    task = pet.create_task("Walk", date(2026, 1, 1), 30, Priority.MEDIUM)
     with pytest.raises(ValueError):
         pet.add_task(task)
     assert len(pet.tasks) == 1
 
 
 def test_create_task_builds_and_adds(pet):
-    task = pet.create_task("Walk", date(2026, 1, 1), time=time(8, 0))
+    task = pet.create_task(
+        "Walk", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(8, 0)
+    )
     assert task.pet is pet
     assert task.time == time(8, 0)
     assert pet.tasks == [task]
 
 
 def test_remove_task(pet):
-    keep = pet.create_task("Feed", date(2026, 1, 1))
-    gone = pet.create_task("Walk", date(2026, 1, 1))
+    keep = pet.create_task("Feed", date(2026, 1, 1), 30, Priority.MEDIUM)
+    gone = pet.create_task("Walk", date(2026, 1, 1), 30, Priority.MEDIUM)
     pet.remove_task(gone.id)
     assert pet.get_tasks() == [keep]
 
 
 def test_get_tasks_returns_copy(pet):
-    pet.create_task("Walk", date(2026, 1, 1))
+    pet.create_task("Walk", date(2026, 1, 1), 30, Priority.MEDIUM)
     pet.get_tasks().clear()
     assert len(pet.tasks) == 1
 
 
 def test_edit_task_delegates_to_task(pet):
-    task = pet.create_task("Walk", date(2026, 1, 1))
+    task = pet.create_task("Walk", date(2026, 1, 1), 30, Priority.MEDIUM)
     pet.edit_task(task.id, description="Run")
     assert task.description == "Run"
 
@@ -280,6 +348,8 @@ def test_edit_owners_ignores_duplicates(pet):
 def make_task(pet, **kwargs):
     kwargs.setdefault("description", "Walk")
     kwargs.setdefault("date", date(2026, 1, 1))
+    kwargs.setdefault("duration", 30)
+    kwargs.setdefault("priority", Priority.MEDIUM)
     return pet.create_task(**kwargs)
 
 
@@ -293,6 +363,26 @@ def test_new_task_defaults(pet):
 
 def test_task_ids_are_unique(pet):
     assert make_task(pet).id != make_task(pet).id
+
+
+def test_new_task_stores_duration_and_priority(pet):
+    task = make_task(pet, duration=45, priority=Priority.HIGH)
+    assert task.duration == 45
+    assert task.priority is Priority.HIGH
+
+
+@pytest.mark.parametrize("duration", [0, -5, 1.5, "30", None])
+def test_duration_must_be_positive_whole_minutes(pet, duration):
+    with pytest.raises(ValueError):
+        make_task(pet, duration=duration)
+    assert pet.tasks == []
+
+
+@pytest.mark.parametrize("priority", ["high", 3, None])
+def test_priority_must_be_a_priority(pet, priority):
+    with pytest.raises(ValueError):
+        make_task(pet, priority=priority)
+    assert pet.tasks == []
 
 
 @pytest.mark.parametrize("interval", [None, 0, -2])
@@ -325,6 +415,8 @@ def test_next_occurrence_copies_fields_and_resets_status(pet):
     task = make_task(
         pet,
         time=time(8, 30),
+        duration=45,
+        priority=Priority.HIGH,
         recurrence=Recurrence.DAILY,
         end_date=date(2026, 2, 1),
         status=Status.COMPLETE,
@@ -335,6 +427,8 @@ def test_next_occurrence_copies_fields_and_resets_status(pet):
     assert nxt.description == task.description
     assert nxt.pet is pet
     assert nxt.time == time(8, 30)
+    assert nxt.duration == 45
+    assert nxt.priority is Priority.HIGH
     assert nxt.recurrence is Recurrence.DAILY
     assert nxt.end_date == date(2026, 2, 1)
     assert nxt.status is Status.INCOMPLETE
@@ -398,10 +492,30 @@ def test_recurrence_chains_until_end_date(pet):
 
 def test_edit_updates_fields(pet):
     task = make_task(pet)
-    task.edit(description="Run", date=date(2026, 2, 2), time=time(7, 0))
+    task.edit(
+        description="Run",
+        date=date(2026, 2, 2),
+        time=time(7, 0),
+        duration=60,
+        priority=Priority.LOW,
+    )
     assert task.description == "Run"
     assert task.date == date(2026, 2, 2)
     assert task.time == time(7, 0)
+    assert task.duration == 60
+    assert task.priority is Priority.LOW
+
+
+@pytest.mark.parametrize(
+    "changes", [{"duration": 0}, {"duration": 1.5}, {"priority": "high"}]
+)
+def test_edit_invalid_duration_or_priority_rolls_back(pet, changes):
+    task = make_task(pet, duration=30, priority=Priority.MEDIUM)
+    with pytest.raises(ValueError):
+        task.edit(description="Run", **changes)
+    assert task.description == "Walk"
+    assert task.duration == 30
+    assert task.priority is Priority.MEDIUM
 
 
 def test_edit_invalid_result_rolls_back(pet):

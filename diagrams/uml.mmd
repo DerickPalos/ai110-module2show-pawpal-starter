@@ -4,6 +4,7 @@ classDiagram
         +str name
         +List~Pet~ pets
         +add_pet(pet)
+        +create_pet(name, birthday) Pet
         +remove_pet(pet_id)
         +edit_pet(pet_id, **changes)
         +get_pets() List~Pet~
@@ -16,7 +17,9 @@ classDiagram
         +date birthday
         +List~Owner~ owners
         +List~Task~ tasks
+        +edit(**changes)
         +add_task(task)
+        +create_task(description, date, duration, priority, **fields) Task
         +remove_task(task_id)
         +get_tasks() List~Task~
         +edit_task(task_id, **changes)
@@ -27,12 +30,16 @@ classDiagram
         +int id [auto]
         +str description
         +date date
-        +time time
         +Pet pet
+        +int duration
+        +Priority priority
+        +time time
         +Recurrence recurrence
         +int interval_days
         +date end_date
         +Status status
+        +validate()
+        +edit(**changes)
         +update_status(status)
         +next_occurrence() Task
     }
@@ -41,7 +48,7 @@ classDiagram
         +Owner owner
         +get_owner_tasks() List~Task~
         +sort_tasks(tasks, sort_by) List~Task~
-        +filter_tasks(tasks, status, pet) List~Task~
+        +filter_tasks(tasks, status, pet, priority) List~Task~
         +get_tasks_by_day(day, tasks) List~Task~
     }
 
@@ -50,6 +57,13 @@ classDiagram
         COMPLETE
         INCOMPLETE
         SKIPPED
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
     }
 
     class Recurrence {
@@ -65,4 +79,5 @@ classDiagram
     Scheduler "1" --> "1" Owner : schedules for
     Scheduler ..> Task : queries
     Task --> Status
+    Task --> Priority
     Task --> Recurrence

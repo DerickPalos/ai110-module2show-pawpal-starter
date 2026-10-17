@@ -1,4 +1,4 @@
-"""PawPal logic layer: Owner, Pet, Task, and Scheduler (skeleton)."""
+"""PawPal logic layer: Owner, Pet, Task, and Scheduler."""
 
 from __future__ import annotations
 
@@ -20,6 +20,12 @@ class Status(Enum):
     SKIPPED = "skipped"
 
 
+class Priority(Enum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
 class Recurrence(Enum):
     NONE = "none"
     DAILY = "daily"
@@ -34,6 +40,9 @@ class Task:
     date: date
     # Back-reference to Pet; excluded from repr/compare to avoid infinite recursion.
     pet: Pet = field(repr=False, compare=False)
+    # Length of the task in whole minutes (>= 1).
+    duration: int
+    priority: Priority
     time: Optional[time] = None
     recurrence: Recurrence = Recurrence.NONE
     # Required (>= 1) when recurrence is EVERY_N_DAYS; ignored otherwise.
@@ -43,10 +52,15 @@ class Task:
     status: Status = Status.INCOMPLETE
 
     def __post_init__(self) -> None:
+        """Validate the task right after construction."""
         self.validate()
 
     def validate(self) -> None:
         """Raise ValueError if the task's fields are inconsistent."""
+        if not isinstance(self.duration, int) or self.duration < 1:
+            raise ValueError("duration must be a whole number of minutes >= 1")
+        if not isinstance(self.priority, Priority):
+            raise ValueError("priority must be a Priority")
         if self.recurrence is Recurrence.EVERY_N_DAYS and (
             self.interval_days is None or self.interval_days < 1
         ):
@@ -55,12 +69,20 @@ class Task:
     # Fields `edit` may change. `id` and `pet` are identity; `status` must go
     # through `update_status` so recurrence still spawns.
     _EDITABLE_FIELDS = frozenset(
-        {"description", "date", "time", "recurrence", "interval_days", "end_date"}
+        {
+            "description",
+            "date",
+            "time",
+            "duration",
+            "priority",
+            "recurrence",
+            "interval_days",
+            "end_date",
+        }
     )
 
     def edit(self, **changes: Any) -> None:
-        """Update fields. Unknown/non-editable fields raise ValueError; if the
-        result is invalid the task is left unchanged."""
+        """Apply changes; ValueError (task unchanged) if not editable or invalid."""
         bad = changes.keys() - self._EDITABLE_FIELDS
         if bad:
             raise ValueError(f"Cannot edit task field(s): {sorted(bad)}")
@@ -76,9 +98,7 @@ class Task:
             raise
 
     def update_status(self, status: Status) -> None:
-        """Set status. Each task is a single occurrence: on COMPLETE or SKIPPED,
-        a recurring task spawns its next occurrence via `next_occurrence()` and
-        adds it to `self.pet`."""
+        """Set status; COMPLETE/SKIPPED on a recurring task adds the next occurrence."""
         was_open = self.status is Status.INCOMPLETE
         self.status = status
         # Only spawn on the transition out of INCOMPLETE, so re-setting a
@@ -89,8 +109,7 @@ class Task:
                 self.pet.add_task(following)
 
     def next_occurrence(self) -> Optional[Task]:
-        """Return a new INCOMPLETE Task for the next date per `recurrence`, or
-        None if non-recurring or the next date would pass `end_date`."""
+        """Return the next INCOMPLETE Task, or None if non-recurring or past end."""
         if self.recurrence is Recurrence.DAILY:
             step = 1
         elif self.recurrence is Recurrence.WEEKLY:
@@ -108,6 +127,8 @@ class Task:
             description=self.description,
             date=next_date,
             pet=self.pet,
+            duration=self.duration,
+            priority=self.priority,
             time=self.time,
             recurrence=self.recurrence,
             interval_days=self.interval_days,
@@ -129,8 +150,7 @@ class Pet:
     _EDITABLE_FIELDS = frozenset({"name", "birthday"})
 
     def edit(self, **changes: Any) -> None:
-        """Update fields. Unknown/non-editable fields raise ValueError, and
-        nothing is changed in that case."""
+        """Update name/birthday; ValueError (nothing changed) for any other field."""
         bad = changes.keys() - self._EDITABLE_FIELDS
         if bad:
             raise ValueError(f"Cannot edit pet field(s): {sorted(bad)}")
@@ -138,6 +158,7 @@ class Pet:
             setattr(self, name, value)
 
     def _find_task(self, task_id: int) -> Task:
+        """Return the task with `task_id`; raises KeyError if absent."""
         for task in self.tasks:
             if task.id == task_id:
                 return task
@@ -151,10 +172,23 @@ class Pet:
             raise ValueError(f"Task {task.id} is already on pet {self.name!r}")
         self.tasks.append(task)
 
-    def create_task(self, description: str, date: date, **fields: Any) -> Task:
-        """Build a Task for this pet, add it, and return it. `fields` are the
-        remaining optional Task fields (time, recurrence, interval_days, ...)."""
-        task = Task(description=description, date=date, pet=self, **fields)
+    def create_task(
+        self,
+        description: str,
+        date: date,
+        duration: int,
+        priority: Priority,
+        **fields: Any,
+    ) -> Task:
+        """Create a Task for this pet (extra `fields` go to Task), add it, return it."""
+        task = Task(
+            description=description,
+            date=date,
+            pet=self,
+            duration=duration,
+            priority=priority,
+            **fields,
+        )
         self.add_task(task)
         return task
 
@@ -193,6 +227,7 @@ class Owner:
     pets: list[Pet] = field(default_factory=list)
 
     def _find_pet(self, pet_id: int) -> Pet:
+        """Return the pet with `pet_id`; raises KeyError if absent."""
         for pet in self.pets:
             if pet.id == pet_id:
                 return pet
@@ -207,15 +242,13 @@ class Owner:
             pet.owners.append(self)
 
     def create_pet(self, name: str, birthday: Optional[date] = None) -> Pet:
-        """Build a Pet owned by this owner, add it (linking both sides), and
-        return it."""
+        """Create a Pet for this owner, add it (linking both sides), and return it."""
         pet = Pet(name=name, birthday=birthday)
         self.add_pet(pet)
         return pet
 
     def remove_pet(self, pet_id: int) -> None:
-        """Remove the pet with `pet_id` (raises KeyError if absent) and unlink
-        this owner from it. The pet and its tasks are otherwise untouched."""
+        """Unlink the pet with `pet_id` (KeyError if absent); the pet itself remains."""
         pet = self._find_pet(pet_id)
         self.pets.remove(pet)
         pet.owners[:] = [o for o in pet.owners if o is not self]
@@ -238,7 +271,7 @@ class Scheduler:
     owner: Owner
 
     def _resolve(self, tasks: Optional[list[Task]]) -> list[Task]:
-        # `is None`, not falsiness: an explicit empty list must stay empty.
+        """Return `tasks`, or all the owner's tasks if None (not if empty)."""
         return self.get_owner_tasks() if tasks is None else tasks
 
     def get_owner_tasks(self) -> list[Task]:
@@ -253,15 +286,22 @@ class Scheduler:
         """Return a sorted copy of `tasks` (defaults to all of the owner's tasks).
 
         `sort_by`: "date" orders by date, then time of day; "time" orders by
-        time of day alone. Tasks with no time come last. The sort is stable, so
-        ties keep their input order. Any other value raises ValueError.
+        time of day alone; "priority" puts HIGH first, then by date and time.
+        Tasks with no time come last. The sort is stable, so ties keep their
+        input order. Any other value raises ValueError.
         """
         if sort_by == "date":
             key = lambda t: (t.date, t.time is None, t.time or time.min)
         elif sort_by == "time":
             key = lambda t: (t.time is None, t.time or time.min)
+        elif sort_by == "priority":
+            key = lambda t: (
+                -t.priority.value, t.date, t.time is None, t.time or time.min
+            )
         else:
-            raise ValueError(f"Unknown sort_by {sort_by!r}; use 'date' or 'time'")
+            raise ValueError(
+                f"Unknown sort_by {sort_by!r}; use 'date', 'time' or 'priority'"
+            )
         return sorted(self._resolve(tasks), key=key)
 
     def filter_tasks(
@@ -269,14 +309,15 @@ class Scheduler:
         tasks: Optional[list[Task]] = None,
         status: Optional[Status] = None,
         pet: Optional[Pet] = None,
+        priority: Optional[Priority] = None,
     ) -> list[Task]:
-        """Return the tasks from `tasks` (defaults to all of the owner's tasks)
-        matching every given criterion; a criterion left as None is ignored."""
+        """Return tasks matching each non-None `status`/`pet`/`priority`."""
         return [
             t
             for t in self._resolve(tasks)
             if (status is None or t.status is status)
             and (pet is None or t.pet is pet)
+            and (priority is None or t.priority is priority)
         ]
 
     def get_tasks_by_day(
@@ -284,7 +325,7 @@ class Scheduler:
         day: date,
         tasks: Optional[list[Task]] = None,
     ) -> list[Task]:
-        """Return tasks on `day` from `tasks` (defaults to all of the owner's
-        tasks), ordered by time of day with untimed tasks last."""
+        """Return tasks on `day` by time (untimed last), ties by priority."""
         on_day = [t for t in self._resolve(tasks) if t.date == day]
-        return self.sort_tasks(on_day, sort_by="time")
+        # Stable sorts: order by priority first, then by time to break ties.
+        return self.sort_tasks(self.sort_tasks(on_day, "priority"), "time")
