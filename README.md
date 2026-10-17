@@ -53,6 +53,137 @@ Today's Schedule for Jordan (Saturday, October 17, 2026)
 [ ] Anytime   Brush coat        20 min  LOW    (Biscuit)
 ```
 
+```
+All tasks, in the order they were added
+========================================================================
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+
+Today's Schedule for Jordan (Saturday, October 17, 2026)
+========================================================================
+[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+
+Filtered by status: incomplete
+========================================================================
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+
+Filtered by status: complete
+========================================================================
+[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+
+Filtered by status: skipped
+========================================================================
+[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+
+Filtered by pet: Mochi
+========================================================================
+[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sat Oct 17  11:00 AM  Midday potty break  10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+
+Filtered by pet: Biscuit
+========================================================================
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+```
+
+```
+All tasks, in the order they were added
+========================================================================
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  11:00 AM  Potty break       10 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sun Oct 18  07:45 AM  Vet call          15 min  MEDIUM (Biscuit, cat)
+
+Today's Schedule for Jordan (Saturday, October 17, 2026)
+========================================================================
+[ ] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  11:00 AM  Potty break       10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+
+Filtered by status: incomplete
+========================================================================
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  11:00 AM  Potty break       10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Vet call          15 min  MEDIUM (Biscuit, cat)
+[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+
+Filtered by status: complete
+========================================================================
+[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+
+Filtered by status: skipped
+========================================================================
+[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+
+Filtered by pet: Mochi
+========================================================================
+[x] Sat Oct 17  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sat Oct 17  11:00 AM  Potty break       10 min  MEDIUM (Mochi, dog)
+[ ] Sat Oct 17  06:00 PM  Evening walk      45 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  07:45 AM  Training session  30 min  MEDIUM (Mochi, dog)
+[ ] Sun Oct 18  08:00 AM  Breakfast         15 min  HIGH   (Mochi, dog)
+[ ] Sun Oct 18  Anytime   Nail trim         15 min  LOW    (Mochi, dog)
+[ ] Thu Jan 01  09:00 AM  Vet checkup       60 min  HIGH   (Mochi, dog)
+
+Filtered by pet: Biscuit
+========================================================================
+[ ] Sat Oct 17  10:15 AM  Playtime          25 min  MEDIUM (Biscuit, cat)
+[ ] Sat Oct 17  12:30 PM  Flea medicine      5 min  HIGH   (Biscuit, cat)
+[ ] Sat Oct 17  05:30 PM  Dinner            10 min  HIGH   (Biscuit, cat)
+[-] Sat Oct 17  Anytime   Brush coat        20 min  LOW    (Biscuit, cat)
+[ ] Sun Oct 18  07:45 AM  Vet call          15 min  MEDIUM (Biscuit, cat)
+
+Conflict check
+========================================================================
+WARNING: Conflict on Sun Oct 18 at 07:45 AM: 'Training session' (Mochi), 'Vet call' (Biscuit)
+```
+
 ## Implementation Summary
 
 An `Owner` can have 0 to many `Pet`. A `Pet` can have 0 to many `Task`.
@@ -79,14 +210,12 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_tasks`, `Scheduler.get_tasks_by_day` | Sort by `"date"` (then time), `"time"`, or `"priority"` (HIGH first). Untimed tasks come last, and ties keep their input order. A day's schedule is ordered by time, with priority breaking ties. |
+| Filtering | `Scheduler.filter_tasks` | Filter by pet, status (incomplete, complete, skipped), and/or priority. Criteria combine with AND, and the result can be passed to `sort_tasks`. |
+| Conflict handling | `Scheduler.find_conflicts`, `Scheduler.get_conflict_warnings` | Flags incomplete tasks that share a date and start time, for the same pet or different pets. Returns warning messages instead of raising. Durations aren't compared, so overlapping but differently-timed tasks aren't caught. |
+| Recurring tasks | `Task.update_status`, `Task.next_occurrence`, `Recurrence` | Daily, weekly, or every N days, with an optional end date. Marking a recurring task complete or skipped creates the next occurrence once. The next date is based on the task's scheduled date, not the completion date. |
 
 ## 📸 Demo Walkthrough
 

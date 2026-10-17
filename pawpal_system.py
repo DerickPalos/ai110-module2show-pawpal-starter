@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, time, timedelta
 from enum import Enum
@@ -358,3 +359,40 @@ class Scheduler:
         on_day = [t for t in self._resolve(tasks) if t.date == day]
         # Stable sorts: order by priority first, then by time to break ties.
         return self.sort_tasks(self.sort_tasks(on_day, "priority"), "time")
+
+    def find_conflicts(
+        self,
+        tasks: Optional[list[Task]] = None,
+    ) -> list[list[Task]]:
+        """Return groups of INCOMPLETE tasks that share a date and start time.
+
+        Lightweight check: only identical start times count (durations are not
+        compared), untimed tasks are ignored, and the tasks may belong to the
+        same pet or different pets. Groups are ordered by date and time.
+        """
+        # 1. Only timed, still-open tasks can conflict.
+        candidates = [
+            t
+            for t in self._resolve(tasks)
+            if t.time is not None and t.status is Status.INCOMPLETE
+        ]
+
+        # 2. Group them by (date, start time).
+        by_slot: defaultdict[tuple[date, time], list[Task]] = defaultdict(list)
+        for t in candidates:
+            by_slot[(t.date, t.time)].append(t)
+
+        # 3. Keep slots with more than one task, in date/time order.
+        return [group for _, group in sorted(by_slot.items()) if len(group) > 1]
+
+    def get_conflict_warnings(
+        self,
+        tasks: Optional[list[Task]] = None,
+    ) -> list[str]:
+        """Return one warning message per conflict group; never raises."""
+        warnings = []
+        for group in self.find_conflicts(tasks):
+            when = f"{group[0].date:%a %b %d} at {group[0].time:%I:%M %p}"
+            names = ", ".join(f"'{t.description}' ({t.pet.name})" for t in group)
+            warnings.append(f"Conflict on {when}: {names}")
+        return warnings

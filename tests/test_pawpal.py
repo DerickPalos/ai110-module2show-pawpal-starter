@@ -150,6 +150,98 @@ def test_tasks_by_day_only_looks_at_given_tasks(week):
     assert w.scheduler.get_tasks_by_day(date(2026, 1, 1), [w.a, w.b]) == [w.b]
 
 
+def test_find_conflicts_different_pets(owner):
+    rex, tom = owner.create_pet("Rex"), owner.create_pet("Tom")
+    a = rex.create_task("a", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(8))
+    b = tom.create_task("b", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(8))
+    assert Scheduler(owner).find_conflicts() == [[a, b]]
+
+
+def test_find_conflicts_same_pet(owner):
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", date(2026, 1, 1), 30, Priority.MEDIUM, time=time(8))
+    b = rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    assert Scheduler(owner).find_conflicts() == [[a, b]]
+
+
+def test_find_conflicts_groups_three_tasks_together(owner):
+    rex = owner.create_pet("Rex")
+    tasks = [
+        rex.create_task(n, date(2026, 1, 1), 5, Priority.LOW, time=time(8))
+        for n in "abc"
+    ]
+    assert Scheduler(owner).find_conflicts() == [tasks]
+
+
+def test_find_conflicts_ordered_by_date_and_time(owner):
+    rex = owner.create_pet("Rex")
+    late = [
+        rex.create_task(n, date(2026, 1, 2), 5, Priority.LOW, time=time(8))
+        for n in "ab"
+    ]
+    early = [
+        rex.create_task(n, date(2026, 1, 1), 5, Priority.LOW, time=time(9))
+        for n in "cd"
+    ]
+    assert Scheduler(owner).find_conflicts() == [early, late]
+
+
+def test_find_conflicts_none_when_times_differ(week):
+    assert week.scheduler.find_conflicts() == []
+
+
+def test_find_conflicts_ignores_different_dates(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("a", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    rex.create_task("b", date(2026, 1, 2), 30, Priority.LOW, time=time(8))
+    assert Scheduler(owner).find_conflicts() == []
+
+
+def test_find_conflicts_ignores_untimed_tasks(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("a", date(2026, 1, 1), 30, Priority.LOW)
+    rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW)
+    assert Scheduler(owner).find_conflicts() == []
+
+
+@pytest.mark.parametrize("status", [Status.COMPLETE, Status.SKIPPED])
+def test_find_conflicts_ignores_finished_tasks(owner, status):
+    rex = owner.create_pet("Rex")
+    rex.create_task("a", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    done = rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    done.update_status(status)
+    assert Scheduler(owner).find_conflicts() == []
+
+
+def test_find_conflicts_only_looks_at_given_tasks(owner):
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    assert Scheduler(owner).find_conflicts([a]) == []
+    assert Scheduler(owner).find_conflicts([]) == []
+
+
+def test_conflict_warnings_message(owner):
+    rex, tom = owner.create_pet("Rex"), owner.create_pet("Tom")
+    rex.create_task("Walk", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    tom.create_task("Feed", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    assert Scheduler(owner).get_conflict_warnings() == [
+        "Conflict on Thu Jan 01 at 08:00 AM: 'Walk' (Rex), 'Feed' (Tom)"
+    ]
+
+
+def test_conflict_warnings_one_per_group(owner):
+    rex = owner.create_pet("Rex")
+    for hour in (8, 9):
+        for name in "ab":
+            rex.create_task(name, date(2026, 1, 1), 5, Priority.LOW, time=time(hour))
+    assert len(Scheduler(owner).get_conflict_warnings()) == 2
+
+
+def test_conflict_warnings_empty_without_conflicts(week):
+    assert week.scheduler.get_conflict_warnings() == []
+
+
 # --- Owner ---
 
 def test_add_pet_links_both_sides(owner, pet):

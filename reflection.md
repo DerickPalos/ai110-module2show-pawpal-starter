@@ -86,7 +86,14 @@ Yes. The AI assistant caught an oversight, in that the every `n` days never had 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+
+My Scheduler also only checks for eaxct start time overlap.
+
 - Why is that tradeoff reasonable for this scenario?
+
+It _could_ be reasonable for this scenario, as something like an overlapping meal and medicine should probably not cause a conflict. It _could_ be unreasonable for this scenario, because an Owner can't walk a dog the same time another dog has to be at the vet.
+
+I accepted the tradeoff regardless, as we were aiming for lightweight. If we get to it later, we can iterate.
 
 ---
 

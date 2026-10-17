@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, time, timedelta
 
 import streamlit as st
 
-from pawpal_system import Owner, Priority, Scheduler, Species
+from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -42,10 +42,49 @@ At minimum, your system should:
 
 st.divider()
 
+def seed_demo_data(owner):
+    """Add the same sample pets and tasks as main.py (out of order on purpose)."""
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+
+    mochi = owner.create_pet("Mochi", birthday=date(2020, 5, 14), species=Species.DOG)
+    biscuit = owner.create_pet("Biscuit", species=Species.CAT)
+
+    mochi.create_task(
+        "Evening walk",
+        today,
+        45,
+        Priority.MEDIUM,
+        time=time(18, 0),
+        recurrence=Recurrence.DAILY,
+    )
+    biscuit.create_task("Flea medicine", today, 5, Priority.HIGH, time=time(12, 30))
+    mochi.create_task(
+        "Breakfast",
+        today,
+        15,
+        Priority.HIGH,
+        time=time(8, 0),
+        recurrence=Recurrence.DAILY,
+    )
+    biscuit.create_task("Brush coat", today, 20, Priority.LOW)  # no set time
+    mochi.create_task(  # not today
+        "Vet checkup", date(2099, 1, 1), 60, Priority.HIGH, time=time(9, 0)
+    )
+    biscuit.create_task("Dinner", today, 10, Priority.HIGH, time=time(17, 30))
+    mochi.create_task("Training session", tomorrow, 30, Priority.MEDIUM, time=time(7, 45))
+    biscuit.create_task("Playtime", today, 25, Priority.MEDIUM, time=time(10, 15))
+    mochi.create_task("Potty break", today, 10, Priority.MEDIUM, time=time(11, 0))
+    mochi.create_task("Nail trim", tomorrow, 15, Priority.LOW)  # no set time
+    # Same time as "Training session" (different pet) to trigger a conflict warning.
+    biscuit.create_task("Vet call", tomorrow, 15, Priority.MEDIUM, time=time(7, 45))
+
+
 # Streamlit reruns this script on every interaction, so keep the Owner in
 # session_state and only create it the first time.
 if "owner" not in st.session_state:
     st.session_state.owner = Owner(name="Jordan")
+    seed_demo_data(st.session_state.owner)  # comment out this line to start empty
 owner = st.session_state.owner
 
 
@@ -123,6 +162,9 @@ else:
                 st.error(str(err))
 
 scheduler = Scheduler(owner)
+for warning in scheduler.get_conflict_warnings():
+    st.warning(warning)
+
 all_tasks = scheduler.sort_tasks()
 if all_tasks:
     st.write("Current tasks:")
