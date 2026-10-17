@@ -57,6 +57,9 @@ class Task:
     # Last date a recurring task may occur (inclusive); None means no end.
     end_date: Optional[date] = None
     status: Status = Status.INCOMPLETE
+    # Internal bookkeeping: True once this task has spawned its next occurrence,
+    # so reopening and re-finishing it can't spawn a duplicate.
+    _spawned: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Validate the task right after construction."""
@@ -108,12 +111,17 @@ class Task:
         """Set status; COMPLETE/SKIPPED on a recurring task adds the next occurrence."""
         was_open = self.status is Status.INCOMPLETE
         self.status = status
-        # Only spawn on the transition out of INCOMPLETE, so re-setting a
-        # finished task's status doesn't create duplicate occurrences.
-        if was_open and status in (Status.COMPLETE, Status.SKIPPED):
+        # Spawn on the transition out of INCOMPLETE, and only once per task, so
+        # neither re-setting a finished status nor reopening and re-finishing
+        # creates duplicate occurrences.
+        if was_open and not self._spawned and status in (
+            Status.COMPLETE,
+            Status.SKIPPED,
+        ):
             following = self.next_occurrence()
             if following is not None:
                 self.pet.add_task(following)
+                self._spawned = True
 
     def next_occurrence(self) -> Optional[Task]:
         """Return the next INCOMPLETE Task, or None if non-recurring or past end."""

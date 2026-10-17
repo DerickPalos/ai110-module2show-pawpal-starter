@@ -194,19 +194,52 @@ An `Owner` can access their `Task`s via the list of `Task`s associated with each
 
 ## 🧪 Testing PawPal+
 
-```bash
+```sh
 # Run the full test suite:
-pytest
+python -m pytest
 
 # Run with coverage:
-pytest --cov
+python -m pytest --cov
 ```
 
 Sample test output:
 
 ```
-# Paste your pytest output here
+=========================================== test session starts ===========================================
+platform darwin -- Python 3.12.5, pytest-9.1.1, pluggy-1.7.0
+rootdir: /Users/derickpalos/Documents/AI110/ai110-module2show-pawpal-starter
+plugins: cov-7.1.0, anyio-4.15.1
+collected 132 items                                                                                       
+
+tests/test_pawpal.py .............................................................................. [ 59%]
+......................................................                                              [100%]
+
+=========================================== 132 passed in 0.15s ===========================================
 ```
+
+```
+=========================================== test session starts ===========================================
+platform darwin -- Python 3.12.5, pytest-9.1.1, pluggy-1.7.0
+rootdir: /Users/derickpalos/Documents/AI110/ai110-module2show-pawpal-starter
+plugins: cov-7.1.0, anyio-4.15.1
+collected 132 items                                                                                       
+
+tests/test_pawpal.py .............................................................................. [ 59%]
+......................................................                                              [100%]
+
+============================================= tests coverage ==============================================
+____________________________ coverage: platform darwin, python 3.12.5-final-0 _____________________________
+
+Name                   Stmts   Miss  Cover
+------------------------------------------
+pawpal_system.py         208      0   100%
+tests/test_pawpal.py     504      0   100%
+------------------------------------------
+TOTAL                    712      0   100%
+=========================================== 132 passed in 0.43s ===========================================
+```
+
+Confidence Level: ⭐⭐⭐⭐
 
 ## 📐 Smarter Scheduling
 

@@ -86,6 +86,43 @@ def test_sort_unknown_key_raises(week):
         week.scheduler.sort_tasks(sort_by="nope")
 
 
+def test_sort_midnight_comes_before_untimed(owner):
+    rex = owner.create_pet("Rex")
+    untimed = rex.create_task("untimed", date(2026, 1, 1), 10, Priority.LOW)
+    midnight = rex.create_task(
+        "midnight", date(2026, 1, 1), 10, Priority.LOW, time=time(0, 0)
+    )
+    assert Scheduler(owner).sort_tasks() == [midnight, untimed]
+
+
+def test_sort_by_time_ignores_date(owner):
+    rex = owner.create_pet("Rex")
+    later_day_early = rex.create_task(
+        "a", date(2026, 1, 2), 10, Priority.LOW, time=time(8)
+    )
+    earlier_day_late = rex.create_task(
+        "b", date(2026, 1, 1), 10, Priority.LOW, time=time(9)
+    )
+    result = Scheduler(owner).sort_tasks(sort_by="time")
+    assert result == [later_day_early, earlier_day_late]
+
+
+def test_sort_mixed_timed_and_untimed_across_days(owner):
+    rex = owner.create_pet("Rex")
+    tasks = [
+        rex.create_task("a", date(2026, 1, 1), 10, Priority.LOW),
+        rex.create_task("b", date(2026, 1, 1), 10, Priority.LOW, time=time(9)),
+        rex.create_task("c", date(2026, 1, 2), 10, Priority.LOW),
+    ]
+    for key in ("date", "time", "priority"):
+        assert len(Scheduler(owner).sort_tasks(sort_by=key)) == 3  # no TypeError
+    assert Scheduler(owner).sort_tasks() == [tasks[1], tasks[0], tasks[2]]
+
+
+def test_sort_single_task(week):
+    assert week.scheduler.sort_tasks([week.a]) == [week.a]
+
+
 @pytest.mark.parametrize("method", ["sort_tasks", "filter_tasks"])
 def test_explicit_empty_list_is_not_replaced_by_all_tasks(week, method):
     assert getattr(week.scheduler, method)([]) == []
@@ -219,6 +256,51 @@ def test_find_conflicts_only_looks_at_given_tasks(owner):
     rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
     assert Scheduler(owner).find_conflicts([a]) == []
     assert Scheduler(owner).find_conflicts([]) == []
+
+
+def test_find_conflicts_ignores_overlap_without_same_start(owner):
+    # Known limitation: only identical start times count, not overlapping spans.
+    rex = owner.create_pet("Rex")
+    rex.create_task("long", date(2026, 1, 1), 60, Priority.LOW, time=time(9, 0))
+    rex.create_task("short", date(2026, 1, 1), 15, Priority.LOW, time=time(9, 30))
+    assert Scheduler(owner).find_conflicts() == []
+
+
+def test_completing_one_task_clears_conflict(owner):
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    rex.create_task("b", date(2026, 1, 1), 30, Priority.LOW, time=time(8))
+    assert len(Scheduler(owner).find_conflicts()) == 1
+    a.update_status(Status.COMPLETE)
+    assert Scheduler(owner).find_conflicts() == []
+
+
+def test_recurring_tasks_conflict_only_once_occurrences_coincide(owner):
+    rex = owner.create_pet("Rex")
+    walk = rex.create_task(
+        "walk", date(2026, 1, 1), 30, Priority.LOW, time=time(8),
+        recurrence=Recurrence.DAILY,
+    )
+    rex.create_task(
+        "groom", date(2026, 1, 2), 30, Priority.LOW, time=time(8),
+        recurrence=Recurrence.WEEKLY,
+    )
+    scheduler = Scheduler(owner)
+    assert scheduler.find_conflicts() == []  # Jan 2 walk not spawned yet
+    walk.update_status(Status.COMPLETE)
+    assert len(scheduler.find_conflicts()) == 1
+
+
+def test_filter_by_status_pet_and_priority_together(week):
+    w = week
+    w.c.edit(priority=Priority.HIGH)
+    result = w.scheduler.filter_tasks(
+        status=Status.INCOMPLETE, pet=w.tom, priority=Priority.HIGH
+    )
+    assert result == [w.c]
+    assert w.scheduler.filter_tasks(
+        status=Status.COMPLETE, pet=w.tom, priority=Priority.HIGH
+    ) == []
 
 
 def test_conflict_warnings_message(owner):
@@ -608,6 +690,114 @@ def test_recurrence_chains_until_end_date(pet):
     assert [t.date for t in pet.tasks] == [
         date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)
     ]
+
+
+@pytest.mark.parametrize(
+    "start, recurrence, interval, expected",
+    [
+        (date(2026, 1, 31), Recurrence.DAILY, None, date(2026, 2, 1)),
+        (date(2026, 12, 31), Recurrence.DAILY, None, date(2027, 1, 1)),
+        (date(2028, 2, 28), Recurrence.DAILY, None, date(2028, 2, 29)),
+        (date(2028, 2, 29), Recurrence.DAILY, None, date(2028, 3, 1)),
+        (date(2027, 2, 28), Recurrence.DAILY, None, date(2027, 3, 1)),
+        (date(2028, 2, 29), Recurrence.WEEKLY, None, date(2028, 3, 7)),
+        (date(2026, 12, 28), Recurrence.WEEKLY, None, date(2027, 1, 4)),
+        (date(2026, 12, 30), Recurrence.EVERY_N_DAYS, 5, date(2027, 1, 4)),
+    ],
+)
+def test_next_occurrence_calendar_rollover(pet, start, recurrence, interval, expected):
+    task = make_task(pet, date=start, recurrence=recurrence, interval_days=interval)
+    assert task.next_occurrence().date == expected
+
+
+def test_weekly_keeps_same_weekday(pet):
+    task = make_task(pet, recurrence=Recurrence.WEEKLY)
+    for _ in range(4):
+        task = task.next_occurrence()
+        assert task.date.weekday() == date(2026, 1, 1).weekday()
+
+
+def test_every_1_day_matches_daily(pet):
+    every = make_task(pet, recurrence=Recurrence.EVERY_N_DAYS, interval_days=1)
+    daily = make_task(pet, recurrence=Recurrence.DAILY)
+    assert every.next_occurrence().date == daily.next_occurrence().date
+
+
+def test_stale_interval_days_ignored_for_daily(pet):
+    task = make_task(pet, recurrence=Recurrence.DAILY, interval_days=10)
+    assert task.next_occurrence().date == date(2026, 1, 2)
+
+
+def test_end_date_before_task_date_spawns_nothing(pet):
+    # validate() doesn't reject this; the end_date check simply stops the chain.
+    task = make_task(pet, recurrence=Recurrence.DAILY, end_date=date(2025, 12, 1))
+    assert task.next_occurrence() is None
+
+
+def test_reopening_and_recompleting_does_not_spawn_again(pet):
+    task = make_task(pet, recurrence=Recurrence.DAILY)
+    task.update_status(Status.COMPLETE)
+    task.update_status(Status.INCOMPLETE)
+    task.update_status(Status.COMPLETE)
+    assert len(pet.tasks) == 2
+
+
+def test_spawned_task_is_appended_and_original_kept(pet):
+    task = make_task(pet, recurrence=Recurrence.DAILY)
+    task.update_status(Status.COMPLETE)
+    assert pet.tasks[0] is task
+    assert pet.tasks[1] is not task
+    assert pet.tasks[1].pet is pet
+    assert pet.tasks[1].id != task.id
+
+
+def test_spawned_task_shows_up_in_owner_tasks(owner):
+    rex = owner.create_pet("Rex")
+    task = rex.create_task(
+        "Walk", date(2026, 1, 1), 30, Priority.LOW, recurrence=Recurrence.DAILY
+    )
+    task.update_status(Status.COMPLETE)
+    assert len(owner.get_tasks()) == 2
+
+
+def test_recurrence_chain_spans_several_generations(pet):
+    task = make_task(pet, recurrence=Recurrence.WEEKLY)
+    for _ in range(4):
+        task.update_status(Status.COMPLETE)
+        task = pet.tasks[-1]
+    assert [t.date for t in pet.tasks] == [
+        date(2026, 1, 1), date(2026, 1, 8), date(2026, 1, 15),
+        date(2026, 1, 22), date(2026, 1, 29),
+    ]
+
+
+def test_completing_past_task_spawns_next_in_the_past(pet):
+    task = make_task(pet, date=date(2020, 1, 1), recurrence=Recurrence.DAILY)
+    task.update_status(Status.COMPLETE)
+    assert pet.tasks[1].date == date(2020, 1, 2)  # no catch-up to today
+
+
+def test_setting_recurrence_to_none_stops_spawning(pet):
+    task = make_task(pet, recurrence=Recurrence.DAILY)
+    task.edit(recurrence=Recurrence.NONE)
+    task.update_status(Status.COMPLETE)
+    assert len(pet.tasks) == 1
+
+
+def test_editing_original_does_not_change_spawned_task(pet):
+    task = make_task(pet, time=time(8), recurrence=Recurrence.DAILY)
+    task.update_status(Status.COMPLETE)
+    task.edit(time=time(10), date=date(2026, 3, 3))
+    assert pet.tasks[1].time == time(8)
+    assert pet.tasks[1].date == date(2026, 1, 2)
+
+
+def test_edit_to_every_n_days_without_interval_rolls_back(pet):
+    task = make_task(pet, recurrence=Recurrence.DAILY)
+    with pytest.raises(ValueError):
+        task.edit(recurrence=Recurrence.EVERY_N_DAYS)
+    assert task.recurrence is Recurrence.DAILY
+    assert task.interval_days is None
 
 
 # edit
