@@ -100,7 +100,7 @@ In Phase 1, I used a bulleted list to generate the UML, which was then used to g
 
 In Phase 2, I went class by class, starting with the "smallest" unit of `Task`. After each class, I generated `pytest` cases. I moved to `Pet`, then `Owner`, then `Scheduler`, at each step creating more `pytest` cases. Vertical integration gave me confidence, as adding new classes did not break existing tests.
 
-I also missed a requirement; a cardinal sin. I prompted the AI assistant with a small plan to introduce the new requirement (add to class attributes, update methods, update test cases, update demo script), and it asked for 2 small clarifications. The plan was then executed as expected.
+I also missed some requirements. I prompted the AI assistant with a small plan to introduce each new requirement (add to class attributes, update methods, update test cases, update demo script), and it asked for small clarifications. The plans were then executed as expected.
 
 - What kinds of prompts or questions were most helpful?
 

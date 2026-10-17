@@ -4,7 +4,7 @@ classDiagram
         +str name
         +List~Pet~ pets
         +add_pet(pet)
-        +create_pet(name, birthday) Pet
+        +create_pet(name, birthday, species) Pet
         +remove_pet(pet_id)
         +edit_pet(pet_id, **changes)
         +get_pets() List~Pet~
@@ -15,8 +15,10 @@ classDiagram
         +int id [auto]
         +str name
         +date birthday
+        +Species species
         +List~Owner~ owners
         +List~Task~ tasks
+        +validate()
         +edit(**changes)
         +add_task(task)
         +create_task(description, date, duration, priority, **fields) Task
@@ -66,6 +68,13 @@ classDiagram
         HIGH
     }
 
+    class Species {
+        <<enumeration>>
+        DOG
+        CAT
+        OTHER
+    }
+
     class Recurrence {
         <<enumeration>>
         NONE
@@ -78,6 +87,7 @@ classDiagram
     Pet "1" *-- "0..*" Task : has
     Scheduler "1" --> "1" Owner : schedules for
     Scheduler ..> Task : queries
+    Pet --> Species
     Task --> Status
     Task --> Priority
     Task --> Recurrence

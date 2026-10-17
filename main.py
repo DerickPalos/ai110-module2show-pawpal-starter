@@ -2,15 +2,15 @@
 
 from datetime import date, time
 
-from pawpal_system import Owner, Priority, Recurrence, Scheduler, Status
+from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species, Status
 
 
 def main() -> None:
     today = date.today()
 
     owner = Owner(name="Jordan")
-    mochi = owner.create_pet("Mochi", birthday=date(2020, 5, 14))
-    biscuit = owner.create_pet("Biscuit")
+    mochi = owner.create_pet("Mochi", birthday=date(2020, 5, 14), species=Species.DOG)
+    biscuit = owner.create_pet("Biscuit", species=Species.CAT)
 
     # Added out of time order on purpose; the Scheduler sorts them.
     mochi.create_task(
@@ -47,7 +47,7 @@ def main() -> None:
         done = "x" if task.status is Status.COMPLETE else " "
         print(
             f"[{done}] {when}  {task.description:<16} {task.duration:>3} min  "
-            f"{task.priority.name:<6} ({task.pet.name})"
+            f"{task.priority.name:<6} ({task.pet.name}, {task.pet.species.value})"
         )
 
 

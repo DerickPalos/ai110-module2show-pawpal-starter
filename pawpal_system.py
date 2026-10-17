@@ -26,6 +26,12 @@ class Priority(Enum):
     HIGH = 3
 
 
+class Species(Enum):
+    DOG = "dog"
+    CAT = "cat"
+    OTHER = "other"
+
+
 class Recurrence(Enum):
     NONE = "none"
     DAILY = "daily"
@@ -141,21 +147,39 @@ class Pet:
     id: int = field(init=False, default_factory=lambda: next(_pet_ids))
     name: str
     birthday: Optional[date] = None
+    species: Species = Species.OTHER
     # Back-reference to Owners; excluded from repr/compare to avoid infinite recursion.
     owners: list[Owner] = field(default_factory=list, repr=False, compare=False)
     tasks: list[Task] = field(default_factory=list)
 
     # Fields `edit` may change. Owners go through `edit_owners` (to keep both
     # sides in sync) and tasks through the task methods.
-    _EDITABLE_FIELDS = frozenset({"name", "birthday"})
+    _EDITABLE_FIELDS = frozenset({"name", "birthday", "species"})
+
+    def __post_init__(self) -> None:
+        """Validate the pet right after construction."""
+        self.validate()
+
+    def validate(self) -> None:
+        """Raise ValueError if the pet's fields are inconsistent."""
+        if not isinstance(self.species, Species):
+            raise ValueError("species must be a Species")
 
     def edit(self, **changes: Any) -> None:
-        """Update name/birthday; ValueError (nothing changed) for any other field."""
+        """Apply changes; ValueError (pet unchanged) if not editable or invalid."""
         bad = changes.keys() - self._EDITABLE_FIELDS
         if bad:
             raise ValueError(f"Cannot edit pet field(s): {sorted(bad)}")
+
+        old = {name: getattr(self, name) for name in changes}
         for name, value in changes.items():
             setattr(self, name, value)
+        try:
+            self.validate()
+        except ValueError:
+            for name, value in old.items():
+                setattr(self, name, value)
+            raise
 
     def _find_task(self, task_id: int) -> Task:
         """Return the task with `task_id`; raises KeyError if absent."""
@@ -241,9 +265,14 @@ class Owner:
         if not any(o is self for o in pet.owners):
             pet.owners.append(self)
 
-    def create_pet(self, name: str, birthday: Optional[date] = None) -> Pet:
+    def create_pet(
+        self,
+        name: str,
+        birthday: Optional[date] = None,
+        species: Species = Species.OTHER,
+    ) -> Pet:
         """Create a Pet for this owner, add it (linking both sides), and return it."""
-        pet = Pet(name=name, birthday=birthday)
+        pet = Pet(name=name, birthday=birthday, species=species)
         self.add_pet(pet)
         return pet
 

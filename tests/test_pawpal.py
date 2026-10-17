@@ -9,6 +9,7 @@ from pawpal_system import (
     Priority,
     Recurrence,
     Scheduler,
+    Species,
     Status,
     Task,
 )
@@ -166,11 +167,22 @@ def test_add_pet_rejects_duplicate(owner, pet):
 
 
 def test_create_pet_builds_and_links(owner):
-    pet = owner.create_pet("Tom", birthday=date(2020, 1, 1))
+    pet = owner.create_pet("Tom", birthday=date(2020, 1, 1), species=Species.CAT)
     assert pet.name == "Tom"
     assert pet.birthday == date(2020, 1, 1)
+    assert pet.species is Species.CAT
     assert owner.pets == [pet]
     assert pet.owners == [owner]
+
+
+def test_create_pet_species_defaults_to_other(owner):
+    assert owner.create_pet("Tom").species is Species.OTHER
+
+
+def test_create_pet_rejects_non_species(owner):
+    with pytest.raises(ValueError):
+        owner.create_pet("Tom", species="cat")
+    assert owner.pets == []
 
 
 def test_remove_pet_unlinks_only_this_owner(owner, pet):
@@ -305,10 +317,28 @@ def test_missing_task_id_raises(pet, method):
 
 # --- Pet: edit ---
 
+def test_new_pet_species_defaults_to_other(pet):
+    assert pet.species is Species.OTHER
+
+
+@pytest.mark.parametrize("species", ["dog", None, 1])
+def test_pet_species_must_be_a_species(species):
+    with pytest.raises(ValueError):
+        Pet(name="Rex", species=species)
+
+
 def test_pet_edit_updates_fields(pet):
-    pet.edit(name="Max", birthday=date(2020, 1, 1))
+    pet.edit(name="Max", birthday=date(2020, 1, 1), species=Species.DOG)
     assert pet.name == "Max"
     assert pet.birthday == date(2020, 1, 1)
+    assert pet.species is Species.DOG
+
+
+def test_pet_edit_invalid_species_rolls_back(pet):
+    with pytest.raises(ValueError):
+        pet.edit(name="Max", species="dog")
+    assert pet.name == "Rex"
+    assert pet.species is Species.OTHER
 
 
 @pytest.mark.parametrize("field_name", ["id", "owners", "tasks", "nope"])
