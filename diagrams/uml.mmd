@@ -1,6 +1,6 @@
 classDiagram
     class Owner {
-        +int id
+        +int id [auto]
         +str name
         +List~Pet~ pets
         +add_pet(pet)
@@ -11,7 +11,7 @@ classDiagram
     }
 
     class Pet {
-        +int id
+        +int id [auto]
         +str name
         +date birthday
         +List~Owner~ owners
@@ -24,14 +24,17 @@ classDiagram
     }
 
     class Task {
-        +int id
+        +int id [auto]
         +str description
         +date date
         +time time
         +Pet pet
         +Recurrence recurrence
+        +int interval_days
+        +date end_date
         +Status status
         +update_status(status)
+        +next_occurrence() Task
     }
 
     class Scheduler {

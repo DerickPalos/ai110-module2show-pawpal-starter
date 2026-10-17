@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, time
 from enum import Enum
+from itertools import count
 from typing import Any, Optional
+
+# Simple auto-incrementing ID counters, one per class (in-memory only).
+_owner_ids = count(1)
+_pet_ids = count(1)
+_task_ids = count(1)
 
 
 class Status(Enum):
@@ -23,22 +29,40 @@ class Recurrence(Enum):
 
 @dataclass
 class Task:
-    id: int
+    id: int = field(init=False, default_factory=lambda: next(_task_ids))
     description: str
     date: date
     # Back-reference to Pet; excluded from repr/compare to avoid infinite recursion.
     pet: Pet = field(repr=False, compare=False)
     time: Optional[time] = None
     recurrence: Recurrence = Recurrence.NONE
+    # Required (>= 1) when recurrence is EVERY_N_DAYS; ignored otherwise.
+    interval_days: Optional[int] = None
+    # Last date a recurring task may occur (inclusive); None means no end.
+    end_date: Optional[date] = None
     status: Status = Status.INCOMPLETE
 
+    def __post_init__(self) -> None:
+        if self.recurrence is Recurrence.EVERY_N_DAYS and (
+            self.interval_days is None or self.interval_days < 1
+        ):
+            raise ValueError("EVERY_N_DAYS requires interval_days >= 1")
+
     def update_status(self, status: Status) -> None:
+        """Set status. Each task is a single occurrence: on COMPLETE or SKIPPED,
+        a recurring task spawns its next occurrence via `next_occurrence()` and
+        adds it to `self.pet`."""
+        raise NotImplementedError
+
+    def next_occurrence(self) -> Optional[Task]:
+        """Return a new INCOMPLETE Task for the next date per `recurrence`, or
+        None if non-recurring or the next date would pass `end_date`."""
         raise NotImplementedError
 
 
 @dataclass
 class Pet:
-    id: int
+    id: int = field(init=False, default_factory=lambda: next(_pet_ids))
     name: str
     birthday: Optional[date] = None
     # Back-reference to Owners; excluded from repr/compare to avoid infinite recursion.
@@ -63,7 +87,7 @@ class Pet:
 
 @dataclass
 class Owner:
-    id: int
+    id: int = field(init=False, default_factory=lambda: next(_owner_ids))
     name: str
     pets: list[Pet] = field(default_factory=list)
 
