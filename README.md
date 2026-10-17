@@ -53,6 +53,14 @@ Today's Schedule for Jordan (Saturday, October 17, 2026)
 [ ] Anytime   Brush coat        20 min  LOW    (Biscuit)
 ```
 
+## Implementation Summary
+
+An `Owner` can have 0 to many `Pet`. A `Pet` can have 0 to many `Task`.
+
+When an `Owner` creates a new `Pet`, that `Pet` is added to the `Owner`'s list of `Pet`s. Removing the `Pet` removes it from the `Owner`'s list of `Pet`s. Editing the `Pet` is delegated to the `Pet` class, and is only accessible by a valid `Owner`.
+
+An `Owner` can access their `Task`s via the list of `Task`s associated with each owned `Pet`.
+
 ## 🧪 Testing PawPal+
 
 ```bash

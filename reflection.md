@@ -95,12 +95,26 @@ Yes. The AI assistant caught an oversight, in that the every `n` days never had 
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+
+In Phase 1, I used a bulleted list to generate the UML, which was then used to generate the Skeleton. There was a bit of an unexpected hiccup in this Phase. I _thought_ I was being explicit in describing the attributes and methods, but the assistant didn't quite pick up on the differences.
+
+In Phase 2, I went class by class, starting with the "smallest" unit of `Task`. After each class, I generated `pytest` cases. I moved to `Pet`, then `Owner`, then `Scheduler`, at each step creating more `pytest` cases. Vertical integration gave me confidence, as adding new classes did not break existing tests.
+
+I also missed a requirement; a cardinal sin. I prompted the AI assistant with a small plan to introduce the new requirement (add to class attributes, update methods, update test cases, update demo script), and it asked for 2 small clarifications. The plan was then executed as expected.
+
 - What kinds of prompts or questions were most helpful?
+
+I found that the (relatively) large job of adding a new requirement was performed quite well after giving it a list of things I think it should address. I gave it a 6-step plan that it agreed with, and I liked that I could notice that it spent more time actually processing and making changes, and I could see it progressing through the list.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+
+Originally, the logic to edit a `Task` was directly in the `Pet.edit_task` method. Though it would technically make sense for a `Task` to be edited by its "parent" `Pet`, I thought the logic for actually changing the `Task` Object made more sense to live in `Task`.
+
 - How did you evaluate or verify what the AI suggested?
+
+It felt like the most important thing to evaluate myself was every time the actual application logic (in `pawpal_system.py`) was created. I skimmed the response from AI to make sure it didn't trip up on anything, then immediately  tried to make sure I understood what the code did before reading the response thoroughly. Then, I'd make sure that its explanations in the response matched what I thought was happening. I also _immediately_ asked for `pytest` cases after code was generated. The cases covered the generated code, and old test cases did not break.
 
 ---
 
