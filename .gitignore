@@ -4,3 +4,8 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .coverage
+
+# Saved app data (written by Owner.save_to_json)
+data.json
+data.json.tmp
+data.json.corrupt

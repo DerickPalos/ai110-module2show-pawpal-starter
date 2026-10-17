@@ -1,8 +1,12 @@
-"""Demo script: build a small PawPal setup and show sorting and filtering."""
+"""Demo script: build a small PawPal setup and show sorting, filtering, conflicts
+and owner availability."""
 
 from datetime import date, time, timedelta
 
 from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species, Status
+
+WEEKDAYS = {0, 1, 2, 3, 4}  # Monday=0 ... Friday=4
+DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def print_tasks(title: str, tasks: list) -> None:
@@ -102,6 +106,52 @@ def main() -> None:
         print(f"WARNING: {warning}")
     if not warnings:
         print("No conflicts found.")
+
+    # Owner availability. Jordan works weekdays 9-5; Sam co-owns Mochi but has
+    # class in the afternoon. The tasks are on next Monday so the output doesn't
+    # depend on which weekday the demo is run.
+    monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    sam = Owner(name="Sam")
+    mochi.edit_owners([owner, sam])
+    owner.add_unavailable(time(9), time(17), WEEKDAYS, "Work")
+    sam.add_unavailable(time(13), time(15), WEEKDAYS, "Class")
+
+    monday_tasks = [
+        mochi.create_task(
+            "Afternoon meds", monday, 10, Priority.HIGH, time=time(13, 30)
+        ),
+        biscuit.create_task(
+            "Early feeding", monday, 15, Priority.HIGH, time=time(7, 30)
+        ),
+        biscuit.create_task("Lunch", monday, 10, Priority.MEDIUM, time=time(12, 0)),
+        mochi.create_task("Midday walk", monday, 30, Priority.MEDIUM, time=time(12, 0)),
+    ]
+
+    print("\nOwner availability")
+    print("=" * 72)
+    for person in (owner, sam):
+        for block in person.unavailable:
+            days = ", ".join(DAY_NAMES[d] for d in sorted(block.days))
+            print(
+                f"{person.name} is unavailable {days} from "
+                f"{block.start:%I:%M %p} to {block.end:%I:%M %p} ({block.label})"
+            )
+    print(f"\nTasks on {monday:%A, %b %d} and who is free to do them:")
+    for task in scheduler.sort_tasks(monday_tasks):
+        free = ", ".join(o.name for o in task.available_owners()) or "nobody"
+        print(
+            f"  {task.time:%I:%M %p}  {task.description:<16} {task.duration:>3} min  "
+            f"({task.pet.name}) -> {free}"
+        )
+
+    # Like conflicts, an uncovered task is a warning message, not an error.
+    # Scoped to the Monday tasks so the output doesn't depend on the weekday.
+    print()
+    availability_warnings = scheduler.get_availability_warnings(monday_tasks)
+    for warning in availability_warnings:
+        print(f"WARNING: {warning}")
+    if not availability_warnings:
+        print("Every task has an owner available.")
 
 
 if __name__ == "__main__":

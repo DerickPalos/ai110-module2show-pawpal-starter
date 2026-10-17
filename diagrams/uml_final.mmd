@@ -3,12 +3,28 @@ classDiagram
         +int id [auto]
         +str name
         +List~Pet~ pets
+        +List~UnavailableBlock~ unavailable
         +add_pet(pet)
         +create_pet(name, birthday, species) Pet
         +remove_pet(pet_id)
         +edit_pet(pet_id, **changes)
         +get_pets() List~Pet~
         +get_tasks() List~Task~
+        +add_unavailable(start, end, days, label) UnavailableBlock
+        +remove_unavailable(block_id)
+        +is_available(day, start, duration) bool
+        +save_to_json(path)
+        +load_from_json(path)$ Owner
+    }
+
+    class UnavailableBlock {
+        +int id [auto]
+        +time start
+        +time end
+        +frozenset~int~ days
+        +str label
+        +validate()
+        +overlaps(day, start, duration) bool
     }
 
     class Pet {
@@ -44,6 +60,7 @@ classDiagram
         +validate()
         +edit(**changes)
         +update_status(status)
+        +available_owners() List~Owner~
         +next_occurrence() Task
     }
 
@@ -55,6 +72,8 @@ classDiagram
         +get_tasks_by_day(day, tasks) List~Task~
         +find_conflicts(tasks) List~List~Task~~
         +get_conflict_warnings(tasks) List~str~
+        +find_unstaffed_tasks(tasks) List~Task~
+        +get_availability_warnings(tasks) List~str~
     }
 
     class Status {
@@ -88,8 +107,10 @@ classDiagram
 
     Owner "1..*" -- "0..*" Pet : cares for
     Pet "1" *-- "0..*" Task : has
+    Owner "1" *-- "0..*" UnavailableBlock : unavailable during
     Scheduler "1" --> "1" Owner : schedules for
     Scheduler ..> Task : queries
+    Task ..> Owner : available_owners
     Pet --> Species
     Task --> Status
     Task --> Priority

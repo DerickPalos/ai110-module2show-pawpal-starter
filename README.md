@@ -111,6 +111,20 @@ Filtered by pet: Biscuit
 Conflict check
 ========================================================================
 WARNING: Conflict on Sun Oct 18 at 07:45 AM: 'Training session' (Mochi), 'Vet call' (Biscuit)
+
+Owner availability
+========================================================================
+Jordan is unavailable Mon, Tue, Wed, Thu, Fri from 09:00 AM to 05:00 PM (Work)
+Sam is unavailable Mon, Tue, Wed, Thu, Fri from 01:00 PM to 03:00 PM (Class)
+
+Tasks on Monday, Oct 19 and who is free to do them:
+  07:30 AM  Early feeding     15 min  (Biscuit) -> Jordan
+  12:00 PM  Lunch             10 min  (Biscuit) -> nobody
+  12:00 PM  Midday walk       30 min  (Mochi) -> Sam
+  01:30 PM  Afternoon meds    10 min  (Mochi) -> nobody
+
+WARNING: No owner available for 'Lunch' (Biscuit) on Mon Oct 19 at 12:00 PM (owners: Jordan)
+WARNING: No owner available for 'Afternoon meds' (Mochi) on Mon Oct 19 at 01:30 PM (owners: Jordan, Sam)
 ```
 
 ## Implementation Summary
@@ -120,6 +134,10 @@ An `Owner` can have 0 to many `Pet`. A `Pet` can have 0 to many `Task`.
 When an `Owner` creates a new `Pet`, that `Pet` is added to the `Owner`'s list of `Pet`s. Removing the `Pet` removes it from the `Owner`'s list of `Pet`s. Editing the `Pet` is delegated to the `Pet` class, and is only accessible by a valid `Owner`.
 
 An `Owner` can access their `Task`s via the list of `Task`s associated with each owned `Pet`.
+
+An `Owner` can also list weekly `UnavailableBlock`s, times when they can't take on tasks (for example, work from 9am to 5pm on weekdays). A `Task` can still be created in one of those times. It is covered as long as at least one of its `Pet`'s owners is free for the whole duration of the task, and is flagged otherwise.
+
+An `Owner` can be saved to a JSON file with `save_to_json(path)` and restored with `Owner.load_from_json(path)`. The file includes the owner, their pets, those pets' other owners, and all of their tasks and unavailable blocks. Ids are kept, so they stay the same between runs. Saving writes to a temporary file first, so a crash can't leave a half-written file. If a file isn't valid PawPal data, loading raises a `ValueError`, and the app keeps the file as `data.json.corrupt` and starts fresh.
 
 ## 🧪 Testing PawPal+
 
@@ -138,12 +156,13 @@ Sample test output:
 platform darwin -- Python 3.12.5, pytest-9.1.1, pluggy-1.7.0
 rootdir: /Users/derickpalos/Documents/AI110/ai110-module2show-pawpal-starter
 plugins: cov-7.1.0, anyio-4.15.1
-collected 132 items                                                                                       
+collected 223 items                                                                                       
 
-tests/test_pawpal.py .............................................................................. [ 59%]
-......................................................                                              [100%]
+tests/test_pawpal.py .............................................................................. [ 34%]
+..............................................................................                      [ 69%]
+...................................................................                                 [100%]
 
-=========================================== 132 passed in 0.15s ===========================================
+=========================================== 223 passed in 0.29s ===========================================
 ```
 
 ```
@@ -151,21 +170,22 @@ tests/test_pawpal.py ...........................................................
 platform darwin -- Python 3.12.5, pytest-9.1.1, pluggy-1.7.0
 rootdir: /Users/derickpalos/Documents/AI110/ai110-module2show-pawpal-starter
 plugins: cov-7.1.0, anyio-4.15.1
-collected 132 items                                                                                       
+collected 223 items                                                                                       
 
-tests/test_pawpal.py .............................................................................. [ 59%]
-......................................................                                              [100%]
+tests/test_pawpal.py .............................................................................. [ 34%]
+..............................................................................                      [ 69%]
+...................................................................                                 [100%]
 
 ============================================= tests coverage ==============================================
 ____________________________ coverage: platform darwin, python 3.12.5-final-0 _____________________________
 
 Name                   Stmts   Miss  Cover
 ------------------------------------------
-pawpal_system.py         208      0   100%
-tests/test_pawpal.py     504      0   100%
+pawpal_system.py         345      0   100%
+tests/test_pawpal.py     847      0   100%
 ------------------------------------------
-TOTAL                    712      0   100%
-=========================================== 132 passed in 0.43s ===========================================
+TOTAL                   1192      0   100%
+=========================================== 223 passed in 0.79s ===========================================
 ```
 
 Confidence Level: ⭐⭐⭐⭐
@@ -178,6 +198,7 @@ Confidence Level: ⭐⭐⭐⭐
 | Filtering | `Scheduler.filter_tasks` | Filter by pet, status (incomplete, complete, skipped), and/or priority. Criteria combine with AND, and the result can be passed to `sort_tasks`. |
 | Conflict handling | `Scheduler.find_conflicts`, `Scheduler.get_conflict_warnings` | Flags incomplete tasks that share a date and start time, for the same pet or different pets. Returns warning messages instead of raising. Durations aren't compared, so overlapping but differently-timed tasks aren't caught. |
 | Recurring tasks | `Task.update_status`, `Task.next_occurrence`, `Recurrence` | Daily, weekly, or every N days, with an optional end date. Marking a recurring task complete or skipped creates the next occurrence once. The next date is based on the task's scheduled date, not the completion date. |
+| Owner availability | `Owner.add_unavailable`, `Owner.is_available`, `Task.available_owners`, `Scheduler.find_unstaffed_tasks`, `Scheduler.get_availability_warnings` | Owners can have weekly unavailable times (e.g. Mon–Fri 9–5). A task can still be created in one, but is flagged when none of its pet's owners is free for its whole duration, so a pet shared with another owner stays covered. Untimed and finished tasks aren't checked. Weekly blocks only, no overnight blocks. |
 
 ## 📸 Demo Walkthrough
 
@@ -215,11 +236,13 @@ Describe your app in numbered steps so a reader can follow along without watchin
 
 ## Features
 
+- **Saved between runs:** Your owner name, pets, tasks and availability are saved automatically to a `data.json` file next to the app and loaded the next time you open it. Delete `data.json` to start fresh.
 - **Owner and pets:** Set the owner's name and add as many pets as you like, each with a name and species. Pets must be added before tasks.
+- **Owner availability:** Enter the weekly times you can't take on tasks, like work. You can still add tasks then, but you'll get a warning if no owner of that pet is free.
 - **Add tasks:** Choose a pet, then give the task a title, date, optional time, duration (1–240 minutes) and priority (Low, Medium or High). A confirmation message appears when the task is added.
 - **Repeating tasks:** A task can repeat daily, weekly or every N days, optionally until a chosen end date.
 - **Complete or skip tasks:** Mark an open task as complete or skipped. For a repeating task, the next occurrence is added automatically and the confirmation message names its date.
 - **Edit tasks:** Change any task's title, date, time, duration, priority or repeat settings. A task's time can be changed but not cleared once set.
 - **Filter and sort the task list:** Filter by pet, status or priority, and sort by date, time or priority. Tasks with no set time are listed last.
-- **Conflict warnings:** The app warns when two open tasks, whether for the same pet or different pets, start at the same time on the same day. It shows "No scheduling conflicts" when there are none.
+- **Conflict warnings:** The app warns when two open tasks, whether for the same pet or different pets, start at the same time on the same day, and when no owner is available at a task's time. It shows "No scheduling conflicts" when there are none.
 - **Today's schedule:** One button lists today's tasks in time order, with higher priority first when times match and untimed tasks last.

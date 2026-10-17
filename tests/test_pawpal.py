@@ -1,8 +1,11 @@
-from datetime import date, time
+import json
+from datetime import date, time, timedelta
+from itertools import count
 from types import SimpleNamespace
 
 import pytest
 
+import pawpal_system
 from pawpal_system import (
     Owner,
     Pet,
@@ -12,6 +15,7 @@ from pawpal_system import (
     Species,
     Status,
     Task,
+    UnavailableBlock,
 )
 
 
@@ -322,6 +326,310 @@ def test_conflict_warnings_one_per_group(owner):
 
 def test_conflict_warnings_empty_without_conflicts(week):
     assert week.scheduler.get_conflict_warnings() == []
+
+
+# --- Availability ---
+
+MONDAY = date(2026, 1, 5)
+FRIDAY = date(2026, 1, 9)
+SATURDAY = date(2026, 1, 10)
+WEEKDAYS = {0, 1, 2, 3, 4}
+
+
+@pytest.fixture
+def work_block():
+    return UnavailableBlock(start=time(9), end=time(17), days=WEEKDAYS, label="Work")
+
+
+@pytest.fixture
+def shared(owner):
+    """Ann is at work on weekdays 9-5; Bob has no commitments. Both own Rex."""
+    bob = Owner(name="Bob")
+    owner.add_unavailable(time(9), time(17), WEEKDAYS, "Work")
+    rex = owner.create_pet("Rex")
+    rex.edit_owners([owner, bob])
+    return SimpleNamespace(ann=owner, bob=bob, rex=rex, scheduler=Scheduler(owner))
+
+
+# UnavailableBlock
+
+def test_unavailable_block_defaults():
+    block = UnavailableBlock(start=time(9), end=time(17))
+    assert block.days is None
+    assert block.label == ""
+
+
+def test_unavailable_block_ids_are_unique():
+    a = UnavailableBlock(start=time(9), end=time(10))
+    b = UnavailableBlock(start=time(9), end=time(10))
+    assert a.id != b.id
+
+
+@pytest.mark.parametrize("start, end", [(time(17), time(9)), (time(9), time(9))])
+def test_unavailable_block_start_must_be_before_end(start, end):
+    with pytest.raises(ValueError):
+        UnavailableBlock(start=start, end=end)
+
+
+@pytest.mark.parametrize("days", [set(), {7}, {-1}, {0, 9}])
+def test_unavailable_block_rejects_bad_weekdays(days):
+    with pytest.raises(ValueError):
+        UnavailableBlock(start=time(9), end=time(17), days=days)
+
+
+def test_unavailable_block_days_stored_as_frozenset():
+    block = UnavailableBlock(start=time(9), end=time(17), days=[0, 1])
+    assert block.days == frozenset({0, 1})
+
+
+@pytest.mark.parametrize(
+    "start, duration, expected",
+    [
+        (time(8), 60, False),      # ends exactly as the block starts
+        (time(8), 61, True),
+        (time(8, 30), 45, True),   # runs into the block
+        (time(9), 30, True),
+        (time(12), 30, True),      # entirely inside
+        (time(16, 30), 60, True),  # runs out of the block
+        (time(17), 30, False),     # starts exactly as the block ends
+        (time(18), 30, False),
+        (time(6), 600, True),      # surrounds the block
+    ],
+)
+def test_block_overlap_boundaries(work_block, start, duration, expected):
+    assert work_block.overlaps(MONDAY, start, duration) is expected
+
+
+def test_block_only_applies_on_its_weekdays(work_block):
+    assert work_block.overlaps(FRIDAY, time(10), 30)
+    assert not work_block.overlaps(SATURDAY, time(10), 30)
+
+
+def test_block_without_days_applies_every_day():
+    block = UnavailableBlock(start=time(9), end=time(17))
+    assert all(
+        block.overlaps(MONDAY + timedelta(days=i), time(10), 30) for i in range(7)
+    )
+
+
+# Owner
+
+def test_add_unavailable_builds_and_adds(owner):
+    block = owner.add_unavailable(time(9), time(17), WEEKDAYS, "Work")
+    assert owner.unavailable == [block]
+    assert block.label == "Work"
+    assert block.days == frozenset(WEEKDAYS)
+
+
+def test_add_unavailable_invalid_leaves_list_unchanged(owner):
+    with pytest.raises(ValueError):
+        owner.add_unavailable(time(17), time(9))
+    assert owner.unavailable == []
+
+
+def test_owners_do_not_share_unavailable_lists():
+    a, b = Owner(name="A"), Owner(name="B")
+    a.add_unavailable(time(9), time(17))
+    assert b.unavailable == []
+
+
+def test_remove_unavailable_removes_only_that_block(owner):
+    keep = owner.add_unavailable(time(9), time(10))
+    gone = owner.add_unavailable(time(13), time(14))
+    owner.remove_unavailable(gone.id)
+    assert owner.unavailable == [keep]
+
+
+def test_remove_unavailable_missing_id_raises(owner):
+    with pytest.raises(KeyError):
+        owner.remove_unavailable(999_999)
+
+
+def test_owner_is_available_with_no_blocks(owner):
+    assert owner.is_available(MONDAY, time(10), 30)
+
+
+def test_owner_is_busy_during_block_and_free_outside_it(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    assert not owner.is_available(MONDAY, time(10), 30)
+    assert owner.is_available(MONDAY, time(18), 30)
+    assert owner.is_available(SATURDAY, time(10), 30)
+
+
+def test_owner_untimed_slot_is_always_available(owner):
+    owner.add_unavailable(time(0), time(23, 59))
+    assert owner.is_available(MONDAY, None, 30)
+
+
+def test_owner_is_busy_if_any_block_overlaps(owner):
+    owner.add_unavailable(time(9), time(10))
+    owner.add_unavailable(time(13), time(14))
+    assert not owner.is_available(MONDAY, time(13, 30), 15)
+    assert owner.is_available(MONDAY, time(11), 60)
+
+
+# Task.available_owners
+
+def test_available_owners_excludes_busy_owner(shared):
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert task.available_owners() == [shared.bob]
+
+
+def test_available_owners_lists_everyone_when_all_free(shared):
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(18))
+    assert task.available_owners() == [shared.ann, shared.bob]
+
+
+def test_available_owners_empty_when_everyone_is_busy(shared):
+    shared.bob.add_unavailable(time(9), time(12), WEEKDAYS)
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert task.available_owners() == []
+
+
+def test_available_owners_untimed_task_has_everyone(shared):
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW)
+    assert task.available_owners() == [shared.ann, shared.bob]
+
+
+def test_available_owners_pet_with_no_owners(pet):
+    task = pet.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert task.available_owners() == []
+
+
+def test_available_owners_depends_on_duration(shared):
+    short = shared.rex.create_task("a", MONDAY, 15, Priority.LOW, time=time(8, 45))
+    long = shared.rex.create_task("b", MONDAY, 30, Priority.LOW, time=time(8, 45))
+    assert short.available_owners() == [shared.ann, shared.bob]
+    assert long.available_owners() == [shared.bob]
+
+
+def test_available_owners_follows_task_edits(shared):
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert task.available_owners() == [shared.bob]
+    task.edit(time=time(18))
+    assert task.available_owners() == [shared.ann, shared.bob]
+    task.edit(date=SATURDAY, time=time(10))
+    assert task.available_owners() == [shared.ann, shared.bob]
+
+
+# Scheduler
+
+def test_unstaffed_when_only_owner_is_busy(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    # Creating the task is still allowed; it is just flagged afterwards.
+    task = rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert rex.tasks == [task]
+    assert Scheduler(owner).find_unstaffed_tasks() == [task]
+
+
+def test_not_unstaffed_when_another_owner_is_free(shared):
+    shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert shared.scheduler.find_unstaffed_tasks() == []
+
+
+def test_unstaffed_when_every_owner_is_busy(shared):
+    shared.bob.add_unavailable(time(9), time(12), WEEKDAYS)
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert shared.scheduler.find_unstaffed_tasks() == [task]
+
+
+def test_adding_a_free_owner_clears_unstaffed(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    task = rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    scheduler = Scheduler(owner)
+    assert scheduler.find_unstaffed_tasks() == [task]
+    rex.edit_owners([owner, Owner(name="Bob")])
+    assert scheduler.find_unstaffed_tasks() == []
+
+
+def test_unstaffed_ignores_untimed_tasks(owner):
+    owner.add_unavailable(time(0), time(23, 59))
+    owner.create_pet("Rex").create_task("Walk", MONDAY, 30, Priority.LOW)
+    assert Scheduler(owner).find_unstaffed_tasks() == []
+
+
+@pytest.mark.parametrize("status", [Status.COMPLETE, Status.SKIPPED])
+def test_unstaffed_ignores_finished_tasks(owner, status):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    task = rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    task.update_status(status)
+    assert Scheduler(owner).find_unstaffed_tasks() == []
+
+
+def test_unstaffed_only_looks_at_given_tasks(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", MONDAY, 30, Priority.LOW, time=time(10))
+    rex.create_task("b", MONDAY, 30, Priority.LOW, time=time(11))
+    scheduler = Scheduler(owner)
+    assert scheduler.find_unstaffed_tasks([a]) == [a]
+    assert scheduler.find_unstaffed_tasks([]) == []
+
+
+def test_unstaffed_in_date_and_time_order(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    later = rex.create_task("later", FRIDAY, 30, Priority.LOW, time=time(10))
+    earlier = rex.create_task("earlier", MONDAY, 30, Priority.LOW, time=time(15))
+    assert Scheduler(owner).find_unstaffed_tasks() == [earlier, later]
+
+
+def test_unstaffed_empty_when_nobody_has_unavailable_time(week):
+    assert week.scheduler.find_unstaffed_tasks() == []
+
+
+def test_recurring_task_is_only_flagged_on_workdays(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    task = rex.create_task(
+        "Walk", FRIDAY, 30, Priority.LOW, time=time(10), recurrence=Recurrence.DAILY
+    )
+    scheduler = Scheduler(owner)
+    assert scheduler.find_unstaffed_tasks() == [task]
+    task.update_status(Status.COMPLETE)  # spawns Saturday's walk, when Ann is free
+    assert scheduler.find_unstaffed_tasks() == []
+
+
+def test_availability_warning_message(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    owner.create_pet("Rex").create_task(
+        "Walk", MONDAY, 30, Priority.LOW, time=time(10)
+    )
+    assert Scheduler(owner).get_availability_warnings() == [
+        "No owner available for 'Walk' (Rex) on Mon Jan 05 at 10:00 AM (owners: Ann)"
+    ]
+
+
+def test_availability_warning_lists_all_owners(shared):
+    shared.bob.add_unavailable(time(9), time(12), WEEKDAYS)
+    shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert shared.scheduler.get_availability_warnings() == [
+        "No owner available for 'Walk' (Rex) on Mon Jan 05 at 10:00 AM "
+        "(owners: Ann, Bob)"
+    ]
+
+
+def test_availability_warning_for_pet_without_owners(owner, pet):
+    task = pet.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    assert Scheduler(owner).get_availability_warnings([task]) == [
+        "No owner available for 'Walk' (Rex) on Mon Jan 05 at 10:00 AM "
+        "(owners: no owners)"
+    ]
+
+
+def test_availability_warnings_one_per_task(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    for hour in (10, 11):
+        rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(hour))
+    assert len(Scheduler(owner).get_availability_warnings()) == 2
+
+
+def test_availability_warnings_empty_without_problems(week):
+    assert week.scheduler.get_availability_warnings() == []
 
 
 # --- Owner ---
@@ -843,3 +1151,268 @@ def test_edit_rejects_non_editable_fields(pet, field_name):
     task = make_task(pet)
     with pytest.raises(ValueError):
         task.edit(**{field_name: None})
+
+
+# --- Persistence ---
+
+@pytest.fixture
+def household(owner):
+    """Ann and Bob share Rex; Ann also has Tom. Covers every saved field."""
+    bob = Owner(name="Bob")
+    rex = owner.create_pet("Rex", birthday=date(2020, 5, 14), species=Species.DOG)
+    tom = owner.create_pet("Tom", species=Species.CAT)
+    rex.edit_owners([owner, bob])
+    owner.add_unavailable(time(9), time(17), WEEKDAYS, "Work")
+    bob.add_unavailable(time(13), time(15), None, "Class")
+    walk = rex.create_task(
+        "Walk", MONDAY, 30, Priority.HIGH, time=time(8, 30),
+        recurrence=Recurrence.EVERY_N_DAYS, interval_days=3,
+        end_date=date(2026, 3, 1),
+    )
+    walk.update_status(Status.COMPLETE)  # also adds the next walk
+    tom.create_task("Brush", MONDAY, 20, Priority.LOW)  # no time
+    tom.create_task(
+        "Nap", FRIDAY, 15, Priority.MEDIUM, time=time(12), status=Status.SKIPPED
+    )
+    return SimpleNamespace(ann=owner, bob=bob, rex=rex, tom=tom, walk=walk)
+
+
+def snapshot(owner):
+    """Everything about an owner, their pets and tasks, ids and order included."""
+    rows = [
+        ("owner", owner.id, owner.name,
+         [(b.id, b.start, b.end, b.days, b.label) for b in owner.unavailable])
+    ]
+    for p in owner.pets:
+        rows.append(
+            ("pet", p.id, p.name, p.birthday, p.species, [o.id for o in p.owners])
+        )
+        rows += [
+            ("task", t.id, t.description, t.date, t.time, t.duration, t.priority,
+             t.recurrence, t.interval_days, t.end_date, t.status, t._spawned,
+             t.pet is p)
+            for t in p.tasks
+        ]
+    return rows
+
+
+def save_and_load(owner, tmp_path):
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    return Owner.load_from_json(path)
+
+
+# round trips
+
+def test_round_trip_preserves_everything(household, tmp_path):
+    loaded = save_and_load(household.ann, tmp_path)
+    assert snapshot(loaded) == snapshot(household.ann)
+    assert snapshot(loaded.pets[0].owners[1]) == snapshot(household.bob)
+
+
+def test_round_trip_builds_new_objects(household, tmp_path):
+    loaded = save_and_load(household.ann, tmp_path)
+    assert loaded is not household.ann
+    assert loaded.pets[0] is not household.rex
+
+
+def test_round_trip_relinks_owners_pets_and_tasks(household, tmp_path):
+    loaded = save_and_load(household.ann, tmp_path)
+    rex, tom = loaded.pets
+    bob = rex.owners[1]
+    assert rex.owners[0] is loaded
+    assert bob.name == "Bob" and bob.pets[0] is rex
+    assert tom.owners[0] is loaded and len(tom.owners) == 1
+    assert all(t.pet is rex for t in rex.tasks)
+
+
+def test_loaded_data_behaves_like_the_original(household, tmp_path):
+    # Monday 2pm: Ann is at work and Bob is in class, so nobody can do it.
+    household.rex.create_task("Midday", MONDAY, 30, Priority.LOW, time=time(14))
+    household.tom.create_task("Clash", MONDAY, 30, Priority.LOW, time=time(14))
+    original = Scheduler(household.ann)
+    loaded = Scheduler(save_and_load(household.ann, tmp_path))
+    assert original.get_availability_warnings()  # the scenario is meaningful
+    assert loaded.get_availability_warnings() == original.get_availability_warnings()
+    assert loaded.get_conflict_warnings() == original.get_conflict_warnings()
+    assert [t.description for t in loaded.sort_tasks()] == [
+        t.description for t in original.sort_tasks()
+    ]
+
+
+def test_empty_owner_round_trip(tmp_path):
+    loaded = save_and_load(Owner(name="Solo"), tmp_path)
+    assert loaded.name == "Solo"
+    assert loaded.pets == [] and loaded.unavailable == []
+
+
+def test_unicode_names_round_trip(owner, tmp_path):
+    owner.create_pet("Müesli 🐹")
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    assert "🐹" in path.read_text(encoding="utf-8")
+    assert Owner.load_from_json(path).pets[0].name == "Müesli 🐹"
+
+
+def test_save_and_load_accept_str_paths(household, tmp_path):
+    path = str(tmp_path / "data.json")
+    household.ann.save_to_json(path)
+    assert Owner.load_from_json(path).name == "Ann"
+
+
+# recurrence
+
+def test_spawn_guard_survives_a_round_trip(household, tmp_path):
+    loaded = save_and_load(household.ann, tmp_path)
+    rex = loaded.pets[0]
+    done = next(t for t in rex.tasks if t.status is Status.COMPLETE)
+    before = len(rex.tasks)
+    done.update_status(Status.INCOMPLETE)
+    done.update_status(Status.COMPLETE)
+    assert len(rex.tasks) == before  # no duplicate next occurrence
+
+
+def test_loaded_recurring_task_still_spawns_next(household, tmp_path):
+    loaded = save_and_load(household.ann, tmp_path)
+    rex = loaded.pets[0]
+    open_walk = next(t for t in rex.tasks if t.status is Status.INCOMPLETE)
+    open_walk.update_status(Status.COMPLETE)
+    assert rex.tasks[-1].date == open_walk.date + timedelta(days=3)
+    assert rex.tasks[-1].status is Status.INCOMPLETE
+
+
+# ids
+
+def test_loading_moves_id_counters_past_loaded_ids(household, tmp_path, monkeypatch):
+    path = tmp_path / "data.json"
+    household.ann.save_to_json(path)
+    for name in ("_owner_ids", "_pet_ids", "_task_ids", "_block_ids"):
+        monkeypatch.setattr(pawpal_system, name, count(1))  # like a fresh process
+    loaded = Owner.load_from_json(path)
+    bob = loaded.pets[0].owners[1]
+    old_pets, old_tasks = loaded.get_pets(), loaded.get_tasks()
+    old_blocks = loaded.unavailable + bob.unavailable
+
+    new_owner = Owner(name="Other")
+    new_pet = loaded.create_pet("New")
+    new_task = new_pet.create_task("x", MONDAY, 5, Priority.LOW)
+    new_block = loaded.add_unavailable(time(1), time(2))
+
+    assert new_owner.id > max(loaded.id, bob.id)
+    assert new_pet.id > max(p.id for p in old_pets)
+    assert new_task.id > max(t.id for t in old_tasks)
+    assert new_block.id > max(b.id for b in old_blocks)
+
+
+def test_loading_does_not_reuse_ids_already_in_use(owner, tmp_path):
+    saved = Owner(name="Old")
+    saved.create_pet("P").create_task("t", MONDAY, 5, Priority.LOW)
+    path = tmp_path / "data.json"
+    saved.save_to_json(path)
+    busy = owner.create_pet("Busy")
+    highest = max(busy.create_task("x", MONDAY, 5, Priority.LOW).id for _ in range(10))
+    loaded = Owner.load_from_json(path)
+    assert loaded.pets[0].create_task("new", MONDAY, 5, Priority.LOW).id > highest
+
+
+# what gets saved
+
+def test_save_overwrites_existing_file_without_leaving_a_temp_file(household, tmp_path):
+    path = tmp_path / "data.json"
+    path.write_text("old contents")
+    household.ann.save_to_json(path)
+    assert json.loads(path.read_text())["version"] == 1
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_file_layout(household, tmp_path):
+    path = tmp_path / "data.json"
+    household.ann.save_to_json(path)
+    data = json.loads(path.read_text())
+    assert data["version"] == 1
+    assert data["root_owner_id"] == household.ann.id
+    assert [o["name"] for o in data["owners"]] == ["Ann", "Bob"]
+    assert [p["name"] for p in data["pets"]] == ["Rex", "Tom"]
+    walk = data["pets"][0]["tasks"][0]
+    assert walk["priority"] == "HIGH"
+    assert walk["date"] == "2026-01-05"
+    assert walk["time"] == "08:30:00"
+    assert data["pets"][1]["tasks"][0]["time"] is None
+
+
+def test_save_includes_connected_owners_but_not_strangers(household, tmp_path):
+    Owner(name="Zed").create_pet("Zippy")
+    path = tmp_path / "data.json"
+    household.ann.save_to_json(path)
+    names = {o["name"] for o in json.loads(path.read_text())["owners"]}
+    assert names == {"Ann", "Bob"}
+
+
+def test_saving_from_a_co_owner_loads_back_that_owner(household, tmp_path):
+    loaded = save_and_load(household.bob, tmp_path)
+    assert loaded.name == "Bob"
+    assert [p.name for p in loaded.pets] == ["Rex"]
+    ann = loaded.pets[0].owners[0]
+    assert [o.name for o in loaded.pets[0].owners] == ["Ann", "Bob"]
+    assert len(ann.pets) == 2  # Ann's other pet came along
+
+
+# bad files
+
+def test_load_missing_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        Owner.load_from_json(tmp_path / "nope.json")
+
+
+def test_load_malformed_json_raises_value_error(tmp_path):
+    path = tmp_path / "data.json"
+    path.write_text("{not json")
+    with pytest.raises(ValueError):
+        Owner.load_from_json(path)
+
+
+@pytest.mark.parametrize("payload", ["[]", "5", "null", "{}"])
+def test_load_wrong_shape_raises_value_error(tmp_path, payload):
+    path = tmp_path / "data.json"
+    path.write_text(payload)
+    with pytest.raises(ValueError):
+        Owner.load_from_json(path)
+
+
+BAD_EDITS = {
+    "unsupported version": lambda d: d.update(version=99),
+    "owners not a list": lambda d: d.update(owners=5),
+    "unknown species": lambda d: d["pets"][0].update(species="LIZARD"),
+    "unknown priority": lambda d: d["pets"][0]["tasks"][0].update(priority="URGENT"),
+    "missing task key": lambda d: d["pets"][0]["tasks"][0].pop("status"),
+    "bad date text": lambda d: d["pets"][0]["tasks"][0].update(date="not-a-date"),
+    "task fails validation": lambda d: d["pets"][0]["tasks"][0].update(duration=0),
+    "block start after end": lambda d: d["owners"][0]["unavailable"][0].update(
+        start="17:00:00", end="09:00:00"
+    ),
+    "block bad weekday": lambda d: d["owners"][0]["unavailable"][0].update(days=[9]),
+    "unknown owner id on pet": lambda d: d["pets"][0].update(owner_ids=[999]),
+    "unknown pet id on owner": lambda d: d["owners"][0].update(pet_ids=[999]),
+    "unknown root owner": lambda d: d.update(root_owner_id=999),
+    "duplicate owner id": lambda d: d["owners"][1].update(id=d["owners"][0]["id"]),
+    "duplicate pet id": lambda d: d["pets"][1].update(id=d["pets"][0]["id"]),
+    "duplicate task id": lambda d: d["pets"][0]["tasks"][1].update(
+        id=d["pets"][0]["tasks"][0]["id"]
+    ),
+    "duplicate block id": lambda d: d["owners"][1]["unavailable"][0].update(
+        id=d["owners"][0]["unavailable"][0]["id"]
+    ),
+    "owner does not list pet": lambda d: d["owners"][0].update(pet_ids=[]),
+    "pet does not list owner": lambda d: d["pets"][0].update(owner_ids=[]),
+}
+
+
+@pytest.mark.parametrize("mutate", BAD_EDITS.values(), ids=BAD_EDITS.keys())
+def test_load_rejects_invalid_data(household, tmp_path, mutate):
+    path = tmp_path / "data.json"
+    household.ann.save_to_json(path)
+    data = json.loads(path.read_text())
+    mutate(data)
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        Owner.load_from_json(path)

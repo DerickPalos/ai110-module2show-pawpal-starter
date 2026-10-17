@@ -1,8 +1,13 @@
+import os
 from datetime import date, time, timedelta
+from pathlib import Path
 
 import streamlit as st
 
 from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species, Status
+
+# Where pets and tasks are remembered between runs (override with PAWPAL_DATA_FILE).
+DATA_FILE = Path(os.environ.get("PAWPAL_DATA_FILE", Path(__file__).parent / "data.json"))
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -78,11 +83,41 @@ def seed_demo_data(owner):
 
 
 # Streamlit reruns this script on every interaction, so keep the Owner in
-# session_state and only create it the first time.
+# session_state and only load it the first time.
 if "owner" not in st.session_state:
-    st.session_state.owner = Owner(name="Jordan")
-    seed_demo_data(st.session_state.owner)  # uncomment to start with sample data
+    try:
+        st.session_state.owner = Owner.load_from_json(DATA_FILE)
+    except (FileNotFoundError, ValueError) as err:
+        if isinstance(err, ValueError):
+            # Keep the unreadable file rather than overwriting it with a fresh start.
+            broken = DATA_FILE.with_name(DATA_FILE.name + ".corrupt")
+            DATA_FILE.replace(broken)
+            st.session_state.load_warning = (
+                f"Couldn't read {DATA_FILE.name} ({err}). Starting fresh; "
+                f"the old file was kept as {broken.name}."
+            )
+        st.session_state.owner = Owner(name="Jordan")
+        seed_demo_data(st.session_state.owner)  # uncomment to start with sample data
 owner = st.session_state.owner
+
+
+def save_data():
+    """Write the owner, pets, tasks and availability to DATA_FILE."""
+    try:
+        owner.save_to_json(DATA_FILE)
+    except OSError as err:
+        message = f"Couldn't save to {DATA_FILE.name}: {err}"
+        st.error(message)  # shown now, unless a st.rerun() follows ...
+        st.session_state.save_error = message  # ... so repeat it at the top next run
+    else:
+        st.session_state.pop("save_error", None)
+
+
+load_warning = st.session_state.pop("load_warning", None)
+if load_warning:
+    st.warning(load_warning)
+if "save_error" in st.session_state:
+    st.error(st.session_state.save_error)
 
 
 def fmt_time(t):
@@ -98,10 +133,21 @@ def task_label(task):
     )
 
 
+DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def fmt_days(block):
+    """Format the weekdays an unavailable block applies to."""
+    if block.days is None or len(block.days) == 7:
+        return "Every day"
+    return ", ".join(DAY_NAMES[d] for d in sorted(block.days))
+
+
 st.subheader("Owner and Pets")
 owner_name = st.text_input("Owner name", value=owner.name)
-if owner_name.strip():
+if owner_name.strip() and owner_name.strip() != owner.name:
     owner.name = owner_name.strip()
+    save_data()
 
 pet_name = st.text_input("Pet name", value="Mochi")
 species = st.selectbox("Species", ["dog", "cat", "other"])
@@ -109,6 +155,7 @@ species = st.selectbox("Species", ["dog", "cat", "other"])
 if st.button("Add pet"):
     if pet_name.strip():
         owner.create_pet(pet_name.strip(), species=Species(species))
+        save_data()
         st.success(f"Added pet '{pet_name.strip()}'.")
     else:
         st.error("Please enter a pet name.")
@@ -119,6 +166,77 @@ if pets:
     st.table([{"Pet": p.name, "Species": p.species.value.title()} for p in pets])
 else:
     st.info("No pets yet. Add one above.")
+
+st.markdown("### Owner Availability")
+st.caption(
+    "Add the weekly times you can't take on tasks, like work. You can still add "
+    "tasks then, but you'll get a warning if no owner of that pet is free."
+)
+avail_flash = st.session_state.pop("avail_flash", None)
+if avail_flash:
+    st.success(avail_flash)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    block_label = st.text_input("Label", value="Work", key="avail_label")
+with col2:
+    block_start = st.time_input("From", value=time(9, 0), key="avail_start")
+with col3:
+    block_end = st.time_input("To", value=time(17, 0), key="avail_end")
+block_days = st.multiselect(
+    "Days",
+    list(range(7)),
+    default=list(range(5)),
+    format_func=lambda d: DAY_NAMES[d],
+    key="avail_days",
+)
+
+if st.button("Add unavailable time"):
+    if not block_days:
+        st.error("Please pick at least one day.")
+    else:
+        try:
+            owner.add_unavailable(
+                block_start, block_end, frozenset(block_days), block_label.strip()
+            )
+        except ValueError as err:
+            st.error(str(err))
+        else:
+            save_data()
+            st.session_state.avail_flash = (
+                f"Added '{block_label.strip() or 'Unavailable'}' for {owner.name}."
+            )
+            st.rerun()
+
+if owner.unavailable:
+    st.write(f"{owner.name} is unavailable:")
+    st.table(
+        [
+            {
+                "Label": b.label or "-",
+                "Days": fmt_days(b),
+                "From": fmt_time(b.start),
+                "To": fmt_time(b.end),
+            }
+            for b in owner.unavailable
+        ]
+    )
+    block_by_id = {b.id: b for b in owner.unavailable}
+    remove_id = st.selectbox(
+        "Time block to remove",
+        list(block_by_id),
+        format_func=lambda i: (
+            f"{block_by_id[i].label or 'Unavailable'} "
+            f"({fmt_days(block_by_id[i])}, {fmt_time(block_by_id[i].start)} - "
+            f"{fmt_time(block_by_id[i].end)})"
+        ),
+        key="avail_remove",
+    )
+    if st.button("Remove time block"):
+        owner.remove_unavailable(remove_id)
+        save_data()
+        st.session_state.avail_flash = "Removed the unavailable time."
+        st.rerun()
 
 st.markdown("### Tasks")
 st.caption("Add a few tasks. They are stored on the pet and feed the scheduler.")
@@ -189,6 +307,7 @@ else:
                     ),
                     end_date=end_date,
                 )
+                save_data()
                 st.success(
                     f"Added '{task_title.strip()}' for {pet_by_id[pet_id].name}."
                 )
@@ -202,7 +321,8 @@ def finish_task(task, status):
     """Update a task's status and queue a success message for the next run."""
     known_ids = {t.id for t in task.pet.tasks}
     task.update_status(status)
-    verb = "Completed" if status is Status.COMPLETE else "Skipped"
+    save_data()
+    verb ="Completed" if status is Status.COMPLETE else "Skipped"
     message = f"{verb} '{task.description}' ({task.pet.name})."
     spawned = [t for t in task.pet.tasks if t.id not in known_ids]
     if spawned:
@@ -325,15 +445,18 @@ if scheduler.get_owner_tasks():
             except ValueError as err:
                 st.error(str(err))
             else:
+                save_data()
                 st.session_state.flash = (
                     f"Updated '{task.description}' ({task.pet.name})."
                 )
                 st.rerun()
 
-conflict_warnings = scheduler.get_conflict_warnings()
-for warning in conflict_warnings:
+schedule_warnings = (
+    scheduler.get_conflict_warnings() + scheduler.get_availability_warnings()
+)
+for warning in schedule_warnings:
     st.warning(warning)
-if not conflict_warnings and scheduler.get_owner_tasks():
+if not schedule_warnings and scheduler.get_owner_tasks():
     st.success("No scheduling conflicts.")
 
 st.markdown("### Current Tasks")
