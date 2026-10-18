@@ -224,29 +224,89 @@ Confidence Level: ⭐⭐⭐⭐
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+Follow these steps to try every feature of the app. They assume a fresh start, so if you have used the app before, delete `data.json` first.
 
-1. Launch the PawPal+ app.
-2. Add a Pet to an Owner.
+1. **Launch the app.**
 
-    Fill out the form in the **Owner and Pets** section with an **Owner name**, a **Pet name**, and a **Pet Species**, and select **Add pet**.
-    
-    * A **Pet** is added to the **Owner** and appears in a **Current pets** table at the bottom of the **Owner and Pets** section.
-    * This step is repeatable.
+    Run `streamlit run app.py`. The page opens with an **Owner and Pets** section at the top.
 
-3. Add a Task to a Pet.
+2. **Add two pets.**
 
-    Select a **Pet** from the list of available Pets. Add a **Task title**, **Date**, **Time** _(Optional)_, **Duration (minutes)**, **Priority**, and info for recurrence. Select **Add task**.
+    In the **Owner and Pets** section, optionally change **Owner name**. Enter **Pet name** `Mochi`, choose **Species** `dog`, and select **Add pet**. Repeat with `Biscuit` and `cat`.
 
-    * A **Task** is added to the **Pet** and appears in a **Current Tasks** section.
-    * This step is repeatable.
-    * The presence of **Task** that shares a start time with another **Task** will produce a Warning for a scheduling conflict.
+    * A green "Added pet 'Mochi'." message appears, and the pet shows up in the **Current pets** table.
+    * Selecting **Add pet** with an empty **Pet name** shows a red "Please enter a pet name." error.
 
-4. In the **Build Schedule** section, select the **Generate schedule** button.
+3. **Add a weekly unavailable time.**
 
-    * A table appears to show the scheduled Tasks.
-    * Tasks that fall in your unavailable times are left off the table and listed separately.
-    * Below the table, each Task has a short explanation of why it is included and when it happens.
+    In the **Owner Availability** section, set **Label** to `Work`, **From** to `9:00 AM`, and **To** to `5:00 PM`. Add `Sat` and `Sun` to **Days** so the block covers every day, then select **Add unavailable time**.
+
+    * A green "Added 'Work' for Jordan." message appears, and a table titled "Jordan is unavailable:" shows Work, Every day, 09:00 AM, 05:00 PM.
+    * If **To** is earlier than **From**, a red error explains that the start must be before the end.
+
+4. **Add five tasks.**
+
+    In the **Tasks** section, choose a **Pet**, enter a **Task title**, leave **Date** as today, fill in the remaining fields from the table, and select **Add task**. Repeat for each row.
+
+    | Pet | Task title | Time (optional) | Duration (minutes) | Priority | Repeats |
+    |-----|------------|-----------------|--------------------|----------|---------|
+    | Mochi | Breakfast | 8:00 AM | 15 | High | Daily |
+    | Biscuit | Flea medicine | 8:00 AM | 5 | Medium | None |
+    | Mochi | Training session | 12:00 PM | 30 | Medium | None |
+    | Mochi | Evening walk | 6:00 PM | 45 | High | Every N Days, **Every N days** `2`, **Repeat until** about a week from today |
+    | Biscuit | Brush coat | _(leave empty)_ | 20 | Low | None |
+
+    * Each task shows a green "Added 'Breakfast' for Mochi." message and appears in the **Current Tasks** table, with its **Repeats** and **Status** columns.
+    * After **Flea medicine**, an orange warning appears: "Conflict on ... at 08:00 AM: 'Breakfast' (Mochi), 'Flea medicine' (Biscuit)". Two open tasks start at the same time.
+    * After **Training session**, a second orange warning appears: "No owner available for 'Training session' (Mochi) ... (owners: Jordan)". The task falls inside **Work** and Jordan is the only owner. The task is still added.
+    * **Repeats** also offers `Weekly`.
+
+5. **Sort and filter the task list.**
+
+    In the **Current Tasks** section, change **Sort by** to `Priority`, then back to `Date`. Then set the **Pet** filter to `Biscuit`, and the **Priority** filter to `High`.
+
+    * `Date` (the default) orders by date, then time of day: Breakfast, Flea medicine, Training session, Evening walk, Brush coat. Tasks with no time, like Brush coat, are always last.
+    * `Priority` lists the High tasks first, Breakfast and then Evening walk, followed by the Medium tasks in time order and the Low task last.
+    * `Time` orders by time of day alone, ignoring the date. It only differs from `Date` once tasks fall on different days, such as tomorrow's Breakfast in step 6.
+    * The **Pet** filter leaves only Biscuit's tasks, Flea medicine and Brush coat. Adding **Priority** `High` shows "No tasks match the filters."
+    * Set each filter back to `All` before continuing.
+
+6. **Complete and skip tasks.**
+
+    In the **Update Task Status** section, choose `Breakfast (Mochi)` in **Task** and select **Mark complete**. Then choose `Brush coat (Biscuit)` and select **Skip**.
+
+    * After completing Breakfast, a green message reads "Completed 'Breakfast' (Mochi). Next one added for ..." with tomorrow's date. **Current Tasks** now shows Breakfast as Complete, plus a new Incomplete Breakfast for tomorrow.
+    * The orange conflict warning disappears, because only open tasks can conflict.
+    * After skipping, a green "Skipped 'Brush coat' (Biscuit)." message appears and its **Status** becomes Skipped. No new task is added, since it doesn't repeat.
+    * Set the **Status** filter to `Complete` or `Skipped` to see them, then set it back to `All`.
+
+7. **Generate your schedule.**
+
+    In the **Build Schedule** section, select **Generate schedule**.
+
+    * A table titled "Today's Schedule for Jordan (...)" shows Breakfast, Flea medicine, Evening walk and Brush coat, with **Time**, **Task**, **Pet**, **Duration (min)** and **Priority** columns. They are in time order, Breakfast ahead of Flea medicine because it has the higher priority, and Brush coat (no time) is last.
+    * Training session is not in the table, because it falls inside Jordan's **Work** time. A "Left off Jordan's schedule (unavailable)" list shows "12:00 PM - Training session (Mochi): nobody is free."
+    * Under "Why each task is scheduled this way", every task has a short explanation: why it is included (date, priority, repeat rule), when it starts and ends, how it ranks against any task that starts at the same time (for example "#1 of 2"), and which owners are free or busy.
+
+8. **Edit a task.**
+
+    In the **Edit Task** section, choose `Training session (Mochi)` in **Task to edit**, change **Task time (optional)** to `7:00 PM`, and select **Save changes**.
+
+    * A green "Updated 'Training session' (Mochi)." message appears, and **Current Tasks** shows the new time.
+    * The "No owner available" warning disappears, and a green "No scheduling conflicts." message takes its place.
+    * Select **Generate schedule** again. Training session is now in the table at 7:00 PM, and nothing is left off.
+
+9. **Close and reopen the app.**
+
+    Stop the app (Ctrl+C) and run `streamlit run app.py` again.
+
+    * The pets, tasks (with their statuses and the edit from step 8) and the **Work** unavailable time are all still there. They are saved automatically to `data.json`, next to `app.py`, each time something changes.
+
+10. **Remove the unavailable time.**
+
+    In the **Owner Availability** section, choose **Work** in **Time block to remove** and select **Remove time block**.
+
+    * A green "Removed the unavailable time." message appears, and the "Jordan is unavailable:" table disappears.
 
 ![Screenshot 1 of PawPal+](images/application1.png)
 
