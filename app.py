@@ -519,13 +519,18 @@ elif pets:
 st.divider()
 
 st.subheader("Build Schedule")
-st.caption("For now this lists today's tasks in time order; smarter planning is next.")
+st.caption(
+    "Builds your schedule for today: your pets' tasks in time order, leaving off "
+    "anything you're unavailable for, with a note on why each task is there and "
+    "when it happens."
+)
 
 if st.button("Generate schedule"):
     today = date.today()
-    todays_tasks = scheduler.get_tasks_by_day(today)
+    todays_plan = scheduler.explain_day(today)
+    left_off = scheduler.get_unavailable_tasks(today)
     st.markdown(f"**Today's Schedule for {owner.name} ({today:%A, %B %d, %Y})**")
-    if todays_tasks:
+    if todays_plan:
         st.table(
             [
                 {
@@ -535,8 +540,20 @@ if st.button("Generate schedule"):
                     "Duration (min)": t.duration,
                     "Priority": t.priority.name.title(),
                 }
-                for t in todays_tasks
+                for t, _ in todays_plan
             ]
         )
+        st.markdown("**Why each task is scheduled this way**")
+        for t, why in todays_plan:
+            st.markdown(f"- **{fmt_time(t.time)} - {t.description} ({t.pet.name}):** {why}")
     else:
-        st.info("Nothing scheduled today.")
+        st.info("Nothing on your schedule today.")
+
+    if left_off:
+        st.markdown(f"**Left off {owner.name}'s schedule (unavailable)**")
+        for t in left_off:
+            others = ", ".join(o.name for o in t.available_owners())
+            cover = f"{others} can do it." if others else "nobody is free."
+            st.markdown(
+                f"- {fmt_time(t.time)} - {t.description} ({t.pet.name}): {cover}"
+            )

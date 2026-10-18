@@ -1416,3 +1416,272 @@ def test_load_rejects_invalid_data(household, tmp_path, mutate):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
         Owner.load_from_json(path)
+
+
+# --- Schedule explanations ---
+
+def explanations(scheduler, day=MONDAY):
+    """Map each task description on `day` to its explanation."""
+    return {t.description: why for t, why in scheduler.explain_day(day)}
+
+
+def test_explain_day_pairs_tasks_in_schedule_order(week):
+    w = week
+    pairs = w.scheduler.explain_day(date(2026, 1, 1))
+    assert [t for t, _ in pairs] == w.scheduler.get_tasks_by_day(date(2026, 1, 1))
+    assert all(isinstance(why, str) and why for _, why in pairs)
+
+
+def test_explain_day_with_no_tasks_is_empty(week):
+    assert week.scheduler.explain_day(date(2026, 1, 3)) == []
+
+
+def test_explain_day_only_looks_at_given_tasks(week):
+    w = week
+    pairs = w.scheduler.explain_day(date(2026, 1, 1), [w.b])
+    assert [t for t, _ in pairs] == [w.b]
+
+
+@pytest.mark.parametrize(
+    "fields, expected",
+    [
+        ({}, "(medium priority)."),
+        ({"recurrence": Recurrence.DAILY}, "(medium priority, repeats daily)."),
+        ({"recurrence": Recurrence.WEEKLY}, "(medium priority, repeats weekly)."),
+        (
+            {"recurrence": Recurrence.EVERY_N_DAYS, "interval_days": 3},
+            "(medium priority, repeats every 3 days).",
+        ),
+    ],
+)
+def test_explanation_says_why_the_task_is_included(owner, fields, expected):
+    owner.create_pet("Rex").create_task("Walk", MONDAY, 30, Priority.MEDIUM, **fields)
+    why = explanations(Scheduler(owner))["Walk"]
+    assert why.startswith("Included because it is scheduled for Mon Jan 05 " + expected)
+
+
+def test_explanation_mentions_priority(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("a", MONDAY, 30, Priority.HIGH)
+    rex.create_task("b", MONDAY, 30, Priority.LOW)
+    why = explanations(Scheduler(owner))
+    assert "(high priority)" in why["a"]
+    assert "(low priority)" in why["b"]
+
+
+@pytest.mark.parametrize("status", [Status.COMPLETE, Status.SKIPPED])
+def test_explanation_mentions_finished_status(owner, status):
+    task = owner.create_pet("Rex").create_task("Walk", MONDAY, 30, Priority.LOW)
+    task.update_status(status)
+    assert f"It is already {status.value}." in explanations(Scheduler(owner))["Walk"]
+
+
+def test_explanation_omits_status_for_open_tasks(owner):
+    owner.create_pet("Rex").create_task("Walk", MONDAY, 30, Priority.LOW)
+    assert "already" not in explanations(Scheduler(owner))["Walk"]
+
+
+def test_explanation_gives_start_and_end_time(owner):
+    owner.create_pet("Rex").create_task(
+        "Walk", MONDAY, 45, Priority.LOW, time=time(8, 30)
+    )
+    why = explanations(Scheduler(owner))["Walk"]
+    assert "It starts at 08:30 AM and runs 45 min (until 09:15 AM)." in why
+
+
+def test_explanation_flags_a_task_that_runs_past_midnight(owner):
+    owner.create_pet("Rex").create_task(
+        "Late", MONDAY, 90, Priority.LOW, time=time(23, 0)
+    )
+    why = explanations(Scheduler(owner))["Late"]
+    assert "(until 12:30 AM the next day)" in why
+
+
+def test_explanation_for_untimed_task(owner):
+    owner.create_pet("Rex").create_task("Brush", MONDAY, 20, Priority.LOW)
+    why = explanations(Scheduler(owner))["Brush"]
+    assert "It has no set time" in why
+    assert "listed after timed ones" in why
+    assert "starts at" not in why
+    assert "Free:" not in why  # no slot, so no availability to report
+
+
+def test_explanation_ranks_tasks_sharing_a_start_time_by_priority(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("low", MONDAY, 10, Priority.LOW, time=time(8))
+    rex.create_task("high", MONDAY, 10, Priority.HIGH, time=time(8))
+    rex.create_task("mid", MONDAY, 10, Priority.MEDIUM, time=time(8))
+    why = explanations(Scheduler(owner))
+    assert "It shares its start time with 'mid', 'low'." in why["high"]
+    assert "#1 of 3" in why["high"]
+    assert "#2 of 3" in why["mid"]
+    assert "#3 of 3" in why["low"]
+
+
+def test_explanation_breaks_equal_priority_ties_by_order_added(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("first", MONDAY, 10, Priority.LOW, time=time(8))
+    rex.create_task("second", MONDAY, 10, Priority.LOW, time=time(8))
+    why = explanations(Scheduler(owner))
+    assert "#1 of 2" in why["first"]
+    assert "#2 of 2" in why["second"]
+
+
+def test_explanation_has_no_tie_note_without_a_shared_start(owner):
+    rex = owner.create_pet("Rex")
+    rex.create_task("a", MONDAY, 10, Priority.LOW, time=time(8))
+    rex.create_task("b", MONDAY, 10, Priority.LOW, time=time(9))
+    assert "shares its start time" not in " ".join(explanations(Scheduler(owner)).values())
+
+
+def test_explanation_lists_free_owners(shared):
+    shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(18))
+    assert "Free: Ann, Bob." in explanations(shared.scheduler)["Walk"]
+
+
+def test_explanation_separates_free_and_busy_owners(shared):
+    shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    # Ann is at work, so the walk is on Bob's schedule, not hers.
+    assert "Free: Bob. Busy: Ann." in explanations(Scheduler(shared.bob))["Walk"]
+
+
+def test_explanation_warns_when_nobody_is_free(shared):
+    shared.bob.add_unavailable(time(9), time(12), WEEKDAYS)
+    task = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    # On nobody's schedule, so ask for the explanation directly.
+    why = shared.scheduler.explain_task(task, [task])
+    assert "Warning: nobody is free then (busy: Ann, Bob)." in why
+
+
+def test_explanation_skips_availability_for_a_pet_without_owners(owner, pet):
+    task = pet.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    why = Scheduler(owner).explain_task(task, [task])
+    assert "Free:" not in why and "Warning" not in why
+
+
+def test_explain_task_matches_explain_day(owner):
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", MONDAY, 10, Priority.LOW, time=time(8))
+    b = rex.create_task("b", MONDAY, 10, Priority.LOW, time=time(8))
+    scheduler = Scheduler(owner)
+    plan = scheduler.get_tasks_by_day(MONDAY)
+    assert scheduler.explain_day(MONDAY) == [
+        (a, scheduler.explain_task(a, plan)),
+        (b, scheduler.explain_task(b, plan)),
+    ]
+
+
+# --- Owner schedule ---
+
+def test_owner_schedule_leaves_out_tasks_the_owner_is_unavailable_for(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS, "Work")
+    rex = owner.create_pet("Rex")
+    before = rex.create_task("before", MONDAY, 30, Priority.LOW, time=time(8))
+    rex.create_task("during", MONDAY, 30, Priority.LOW, time=time(10))
+    after = rex.create_task("after", MONDAY, 30, Priority.LOW, time=time(18))
+    assert Scheduler(owner).get_owner_schedule(MONDAY) == [before, after]
+
+
+def test_owner_schedule_keeps_untimed_tasks(owner):
+    owner.add_unavailable(time(0), time(23, 59))
+    untimed = owner.create_pet("Rex").create_task("Brush", MONDAY, 20, Priority.LOW)
+    assert Scheduler(owner).get_owner_schedule(MONDAY) == [untimed]
+
+
+def test_owner_schedule_drops_a_task_that_runs_into_a_block(owner):
+    owner.add_unavailable(time(9), time(17))
+    rex = owner.create_pet("Rex")
+    rex.create_task("runs in", MONDAY, 60, Priority.LOW, time=time(8, 30))
+    fits = rex.create_task("fits", MONDAY, 30, Priority.LOW, time=time(8, 30))
+    scheduler = Scheduler(owner)
+    assert scheduler.get_owner_schedule(MONDAY) == [fits]
+
+
+def test_owner_schedule_matches_day_order_for_the_tasks_it_keeps(owner):
+    owner.add_unavailable(time(9), time(10))
+    rex = owner.create_pet("Rex")
+    rex.create_task("low", MONDAY, 10, Priority.LOW, time=time(8))
+    rex.create_task("high", MONDAY, 10, Priority.HIGH, time=time(8))
+    rex.create_task("blocked", MONDAY, 10, Priority.HIGH, time=time(9, 30))
+    rex.create_task("untimed", MONDAY, 10, Priority.MEDIUM)
+    scheduler = Scheduler(owner)
+    assert scheduler.get_owner_schedule(MONDAY) == [
+        t for t in scheduler.get_tasks_by_day(MONDAY) if t.description != "blocked"
+    ]
+
+
+def test_owner_schedule_equals_the_day_when_owner_has_no_unavailable_time(week):
+    day = date(2026, 1, 1)
+    assert week.scheduler.get_owner_schedule(day) == week.scheduler.get_tasks_by_day(day)
+
+
+def test_owner_schedule_only_includes_the_requested_day(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    other_day = rex.create_task("next day", SATURDAY, 30, Priority.LOW, time=time(10))
+    assert Scheduler(owner).get_owner_schedule(MONDAY) == []
+    assert Scheduler(owner).get_owner_schedule(SATURDAY) == [other_day]
+
+
+def test_owner_schedule_only_looks_at_given_tasks(owner):
+    rex = owner.create_pet("Rex")
+    a = rex.create_task("a", MONDAY, 30, Priority.LOW, time=time(8))
+    rex.create_task("b", MONDAY, 30, Priority.LOW, time=time(9))
+    scheduler = Scheduler(owner)
+    assert scheduler.get_owner_schedule(MONDAY, [a]) == [a]
+    assert scheduler.get_owner_schedule(MONDAY, []) == []
+
+
+def test_owner_schedule_is_empty_when_everything_clashes(owner):
+    owner.add_unavailable(time(0), time(23, 59))
+    owner.create_pet("Rex").create_task("a", MONDAY, 30, Priority.LOW, time=time(10))
+    assert Scheduler(owner).get_owner_schedule(MONDAY) == []
+
+
+def test_co_owners_get_different_schedules(shared):
+    walk = shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    evening = shared.rex.create_task("Evening", MONDAY, 30, Priority.LOW, time=time(18))
+    assert shared.scheduler.get_owner_schedule(MONDAY) == [evening]  # Ann at work
+    assert Scheduler(shared.bob).get_owner_schedule(MONDAY) == [walk, evening]
+
+
+def test_unavailable_tasks_are_the_ones_left_off(owner):
+    owner.add_unavailable(time(9), time(17), WEEKDAYS)
+    rex = owner.create_pet("Rex")
+    free = rex.create_task("free", MONDAY, 30, Priority.LOW, time=time(8))
+    late = rex.create_task("late", MONDAY, 30, Priority.LOW, time=time(15))
+    mid = rex.create_task("mid", MONDAY, 30, Priority.LOW, time=time(11))
+    scheduler = Scheduler(owner)
+    assert scheduler.get_unavailable_tasks(MONDAY) == [mid, late]
+    assert scheduler.get_owner_schedule(MONDAY) == [free]
+
+
+def test_schedule_and_unavailable_tasks_together_cover_the_day(shared):
+    for hour in (7, 10, 12, 18):
+        shared.rex.create_task(f"t{hour}", MONDAY, 30, Priority.LOW, time=time(hour))
+    shared.rex.create_task("untimed", MONDAY, 30, Priority.LOW)
+    day = shared.scheduler.get_tasks_by_day(MONDAY)
+    kept = shared.scheduler.get_owner_schedule(MONDAY)
+    left_off = shared.scheduler.get_unavailable_tasks(MONDAY)
+    assert len(kept) + len(left_off) == len(day)
+    assert not any(a is b for a in kept for b in left_off)
+
+
+def test_unavailable_tasks_empty_without_unavailable_time(week):
+    assert week.scheduler.get_unavailable_tasks(date(2026, 1, 1)) == []
+
+
+def test_explain_day_follows_the_owner_schedule(shared):
+    shared.rex.create_task("Walk", MONDAY, 30, Priority.LOW, time=time(10))
+    shared.rex.create_task("Evening", MONDAY, 30, Priority.LOW, time=time(18))
+    assert list(explanations(shared.scheduler)) == ["Evening"]
+    assert list(explanations(Scheduler(shared.bob))) == ["Walk", "Evening"]
+
+
+def test_explain_day_ranks_ties_within_the_owner_schedule(shared):
+    # Only the two 6pm tasks share a start time; the 8am task doesn't affect them.
+    shared.rex.create_task("early", MONDAY, 30, Priority.LOW, time=time(8))
+    shared.rex.create_task("a", MONDAY, 10, Priority.LOW, time=time(18))
+    shared.rex.create_task("b", MONDAY, 10, Priority.LOW, time=time(18))
+    why = explanations(shared.scheduler)
+    assert "#1 of 2" in why["a"] and "#2 of 2" in why["b"]

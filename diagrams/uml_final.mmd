@@ -70,10 +70,14 @@ classDiagram
         +sort_tasks(tasks, sort_by) List~Task~
         +filter_tasks(tasks, status, pet, priority) List~Task~
         +get_tasks_by_day(day, tasks) List~Task~
+        +get_owner_schedule(day, tasks) List~Task~
+        +get_unavailable_tasks(day, tasks) List~Task~
         +find_conflicts(tasks) List~List~Task~~
         +get_conflict_warnings(tasks) List~str~
         +find_unstaffed_tasks(tasks) List~Task~
         +get_availability_warnings(tasks) List~str~
+        +explain_task(task, plan) str
+        +explain_day(day, tasks) List~tuple~
     }
 
     class Status {

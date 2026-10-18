@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from itertools import count
 from pathlib import Path
@@ -527,6 +527,34 @@ class Scheduler:
         # Stable sorts: order by priority first, then by time to break ties.
         return self.sort_tasks(self.sort_tasks(on_day, "priority"), "time")
 
+    def _owner_is_free_for(self, task: Task) -> bool:
+        """True if none of the owner's unavailable blocks overlap `task`'s slot."""
+        return self.owner.is_available(task.date, task.time, task.duration)
+
+    def get_owner_schedule(
+        self,
+        day: date,
+        tasks: Optional[list[Task]] = None,
+    ) -> list[Task]:
+        """Return the owner's own schedule for `day`, in `get_tasks_by_day` order.
+
+        Tasks the owner is unavailable for are left out (untimed tasks never
+        clash with an unavailable block). Another owner of the same pet may
+        still cover a left-out task; if several owners are free, the task is
+        on each of their schedules, since tasks aren't assigned to one owner.
+        """
+        return [t for t in self.get_tasks_by_day(day, tasks) if self._owner_is_free_for(t)]
+
+    def get_unavailable_tasks(
+        self,
+        day: date,
+        tasks: Optional[list[Task]] = None,
+    ) -> list[Task]:
+        """Return the tasks on `day` left off the owner's schedule because they're unavailable."""
+        return [
+            t for t in self.get_tasks_by_day(day, tasks) if not self._owner_is_free_for(t)
+        ]
+
     def find_conflicts(
         self,
         tasks: Optional[list[Task]] = None,
@@ -593,6 +621,75 @@ class Scheduler:
                 f"{t.date:%a %b %d} at {t.time:%I:%M %p} (owners: {owners})"
             )
         return warnings
+
+    def explain_task(self, task: Task, plan: list[Task]) -> str:
+        """Say why `task` is in `plan` (one day's schedule) and when it happens.
+
+        `plan` must contain `task`. The text covers its priority and repeat
+        rule, its start and end time (or that it has none), how it ranks
+        against tasks starting at the same time, and which of its pet's
+        owners are free then.
+        """
+        if task.recurrence is Recurrence.DAILY:
+            repeats = ", repeats daily"
+        elif task.recurrence is Recurrence.WEEKLY:
+            repeats = ", repeats weekly"
+        elif task.recurrence is Recurrence.EVERY_N_DAYS:
+            repeats = f", repeats every {task.interval_days} days"
+        else:
+            repeats = ""
+        parts = [
+            f"Included because it is scheduled for {task.date:%a %b %d} "
+            f"({task.priority.name.lower()} priority{repeats})."
+        ]
+        if task.status is not Status.INCOMPLETE:
+            parts.append(f"It is already {task.status.value}.")
+
+        if task.time is None:
+            parts.append(
+                "It has no set time, so it can be done any time that day. Untimed "
+                "tasks are listed after timed ones, higher priority first."
+            )
+            return " ".join(parts)
+
+        end = datetime.combine(task.date, task.time) + timedelta(minutes=task.duration)
+        until = f"{end:%I:%M %p}" + ("" if end.date() == task.date else " the next day")
+        parts.append(
+            f"It starts at {task.time:%I:%M %p} and runs {task.duration} min "
+            f"(until {until})."
+        )
+
+        same_start = [t for t in plan if t.time == task.time]
+        if len(same_start) > 1:
+            rank = next(i for i, t in enumerate(same_start, 1) if t is task)
+            others = ", ".join(f"'{t.description}'" for t in same_start if t is not task)
+            parts.append(
+                f"It shares its start time with {others}. Ties go to the higher "
+                f"priority, then to the task added first, so it is #{rank} of "
+                f"{len(same_start)}."
+            )
+
+        if task.pet.owners:
+            free = task.available_owners()
+            busy = [o for o in task.pet.owners if not any(o is f for f in free)]
+            busy_names = ", ".join(o.name for o in busy)
+            if not free:
+                parts.append(f"Warning: nobody is free then (busy: {busy_names}).")
+            elif busy:
+                free_names = ", ".join(o.name for o in free)
+                parts.append(f"Free: {free_names}. Busy: {busy_names}.")
+            else:
+                parts.append(f"Free: {', '.join(o.name for o in free)}.")
+        return " ".join(parts)
+
+    def explain_day(
+        self,
+        day: date,
+        tasks: Optional[list[Task]] = None,
+    ) -> list[tuple[Task, str]]:
+        """Return the owner's schedule for `day` as (task, explanation) pairs."""
+        plan = self.get_owner_schedule(day, tasks)
+        return [(t, self.explain_task(t, plan)) for t in plan]
 
 
 # --- JSON persistence helpers (used by Owner.save_to_json / load_from_json) ---

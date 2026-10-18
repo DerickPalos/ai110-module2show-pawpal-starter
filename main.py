@@ -1,6 +1,7 @@
-"""Demo script: build a small PawPal setup and show sorting, filtering, conflicts
-and owner availability."""
+"""Demo script: build a small PawPal setup and show sorting, filtering, conflicts,
+owner availability and schedule explanations."""
 
+import textwrap
 from datetime import date, time, timedelta
 
 from pawpal_system import Owner, Priority, Recurrence, Scheduler, Species, Status
@@ -23,6 +24,16 @@ def print_tasks(title: str, tasks: list) -> None:
             f"{task.duration:>3} min  {task.priority.name:<6} "
             f"({task.pet.name}, {task.pet.species.value})"
         )
+
+
+def print_explanations(title: str, plan: list) -> None:
+    """Print each (task, explanation) pair, with the explanation wrapped under it."""
+    print(f"\n{title}")
+    print("=" * 72)
+    for task, why in plan:
+        when = f"{task.time:%I:%M %p}" if task.time else "Anytime "
+        print(f"{when}  {task.description} ({task.pet.name})")
+        print(textwrap.fill(why, width=72, initial_indent="  ", subsequent_indent="  "))
 
 
 def main() -> None:
@@ -72,7 +83,7 @@ def main() -> None:
 
     print_tasks(
         f"Today's Schedule for {owner.name} ({today:%A, %B %d, %Y})",
-        scheduler.get_tasks_by_day(today),
+        scheduler.get_owner_schedule(today),
     )
 
     # Change some statuses so the status filter has something to show. Finishing
@@ -152,6 +163,29 @@ def main() -> None:
         print(f"WARNING: {warning}")
     if not availability_warnings:
         print("Every task has an owner available.")
+
+    # Each owner's own schedule leaves off the tasks they're unavailable for, and
+    # every task is explained. Scoped to the Monday tasks, as above, so the output
+    # doesn't depend on the weekday.
+    print_explanations(
+        f"{owner.name}'s schedule on {monday:%A}",
+        scheduler.explain_day(monday, monday_tasks),
+    )
+    print("\nLeft off Jordan's schedule (unavailable)")
+    print("=" * 72)
+    for task in scheduler.get_unavailable_tasks(monday, monday_tasks):
+        others = ", ".join(o.name for o in task.available_owners())
+        print(
+            f"{task.time:%I:%M %p}  {task.description} ({task.pet.name}) -> "
+            f"{others + ' can do it' if others else 'nobody is free'}"
+        )
+
+    sam_scheduler = Scheduler(sam)
+    sam_tasks = scheduler.filter_tasks(monday_tasks, pet=mochi)  # Sam's pets only
+    print_explanations(
+        f"{sam.name}'s schedule on {monday:%A}",
+        sam_scheduler.explain_day(monday, sam_tasks),
+    )
 
 
 if __name__ == "__main__":
